@@ -1,0 +1,324 @@
+sumber:
+  spesifikasi: https://developers.hostinger.com/openapi/openapi.json
+  versi_spesifikasi: 3.4.2
+  sha256: 308dd885267f149d360ec47c9899300e911a5db2b46af0d874601efdcc8f6227
+  diunduh: 2026-11-22
+  base_url: https://developers.hostinger.com
+  autentikasi: bearer_token_hpanel
+  namespace: hosting
+
+endpoint:
+  - id: hosting.orders.list
+    operation_id: hosting_listOrdersV1
+    method: GET
+    path: /api/hosting/v1/orders
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    paginasi: true
+    dipakai_untuk: [validasi_token, discovery_akun, nama_paket]
+    catatan: Hanya order Web dan Cloud hosting. Paket hanya berisi nama (contoh hostinger_business), tanpa kuota.
+
+  - id: hosting.websites.list
+    operation_id: hosting_listWebsitesV1
+    method: GET
+    path: /api/hosting/v1/websites
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    paginasi: true
+    filter: [username, order_id, is_enabled, domain, website_types]
+    dipakai_untuk: [API_LIST_WEBSITES, discovery_akun, inventory, cek_bentrok_domain]
+    field_penting: [domain, vhost_type, is_enabled, username, order_id, root_directory, parent_domain, website_type]
+    catatan: username adalah akun hosting uXXXXXXXX. is_enabled mencerminkan suspend, bukan kesiapan. Termasuk website dari akun lain yang dibagikan.
+
+  - id: hosting.datacenters.list
+    operation_id: hosting_listAvailableDatacentersV1
+    method: GET
+    path: /api/hosting/v1/datacenters
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [provisioning]
+
+  - id: hosting.onboardings.start
+    operation_id: hosting_startWebsiteSetupV1
+    method: POST
+    path: /api/hosting/v1/orders/{order_id}/onboardings
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: true
+    polling: hosting.onboardings.list
+    dipakai_untuk: [API_CREATE_WEBSITE]
+    body: {type: null, domain: null}
+    catatan: type null untuk website kosong. domain null membuat subdomain gratis sementara otomatis. Menggantikan POST /api/hosting/v1/websites yang deprecated.
+
+  - id: hosting.onboardings.list
+    operation_id: hosting_listWebsiteSetupsV1
+    method: GET
+    path: /api/hosting/v1/onboardings
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    filter: [order_id, subscription_id, domain]
+    dipakai_untuk: [polling_provisioning, idempotensi_provisioning]
+    catatan: Polling tiap 10-15 detik sampai status completed. Hanya setup 24 jam terakhir.
+
+  - id: hosting.websites.create
+    operation_id: hosting_createWebsiteV1
+    method: POST
+    path: /api/hosting/v1/websites
+    status_spesifikasi: deprecated
+    destruktif: false
+    asinkron: true
+    dipakai_untuk: []
+    catatan: Deprecated. Tidak dipakai, gunakan hosting.onboardings.start.
+
+  - id: hosting.websites.delete
+    operation_id: hosting_deleteWebsiteV1
+    method: DELETE
+    path: /api/hosting/v1/websites/{domain}
+    status_spesifikasi: tersedia
+    destruktif: true
+    asinkron: true
+    dipakai_untuk: [cleanup]
+    catatan: Menghapus permanen file, database, dan konfigurasi website. Hanya main dan addon. Wajib lewat gerbang konfirmasi dan audit_log.
+
+  - id: hosting.free_subdomains.generate
+    operation_id: hosting_generateAFreeSubdomainV1
+    method: POST
+    path: /api/hosting/v1/domains/free-subdomains
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [API_FREE_SUBDOMAIN, domain_dummy, subdomain_sementara_sumber]
+    catatan: Subdomain berlaku untuk onboarding dalam 24 jam.
+
+  - id: hosting.domains.verify_ownership
+    operation_id: hosting_verifyDomainOwnershipV1
+    method: POST
+    path: /api/hosting/v1/domains/verify-ownership
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [cutover_pasang_domain_tujuan]
+    catatan: Mengembalikan TXT verifikasi. Perilaku saat domain masih terpasang di akun lain belum jelas.
+
+  - id: hosting.subdomains.list
+    operation_id: hosting_listWebsiteSubdomainsV1
+    method: GET
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/subdomains
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [inventory]
+
+  - id: hosting.subdomains.create
+    operation_id: hosting_createWebsiteSubdomainV1
+    method: POST
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/subdomains
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [restore_subdomain]
+
+  - id: hosting.subdomains.delete
+    operation_id: hosting_deleteWebsiteSubdomainV1
+    method: DELETE
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/subdomains/{subdomain}
+    status_spesifikasi: tersedia
+    destruktif: true
+    asinkron: false
+    dipakai_untuk: [cleanup]
+
+  - id: hosting.parked_domains.list
+    operation_id: hosting_listWebsiteParkedDomainsV1
+    method: GET
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/parked-domains
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [inventory]
+
+  - id: hosting.parked_domains.create
+    operation_id: hosting_createWebsiteParkedDomainV1
+    method: POST
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/parked-domains
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [restore_parked_domain, kandidat_cutover]
+    catatan: Kandidat cara memasang domain asli ke website dummy di tujuan. Wajib dibuktikan di Fase 4.
+
+  - id: hosting.parked_domains.delete
+    operation_id: hosting_deleteWebsiteParkedDomainV1
+    method: DELETE
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/parked-domains/{parkedDomain}
+    status_spesifikasi: tersedia
+    destruktif: true
+    asinkron: false
+    dipakai_untuk: [rollback, cleanup]
+
+  - id: hosting.redirects.list
+    operation_id: hosting_listWebsiteRedirectsV1
+    method: GET
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/redirects
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [inventory]
+
+  - id: hosting.databases.list
+    operation_id: hosting_listAccountDatabasesV1
+    method: GET
+    path: /api/hosting/v1/accounts/{username}/databases
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    paginasi: true
+    filter: [domain, is_assigned, search]
+    dipakai_untuk: [inventory, idempotensi_buat_db, kuota_db]
+    field_penting: [name, user, domain, disk_usage_mb, max_size_mb, host, port]
+
+  - id: hosting.databases.create
+    operation_id: hosting_createAccountDatabaseV1
+    method: POST
+    path: /api/hosting/v1/accounts/{username}/databases
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [API_DB_CREATE]
+    body_wajib: [name, user, password, website_domain]
+    catatan: Prefix username akun ditambahkan otomatis bila tidak ada. Password tidak boleh dicatat di log.
+
+  - id: hosting.databases.delete
+    operation_id: hosting_deleteAccountDatabaseV1
+    method: DELETE
+    path: /api/hosting/v1/accounts/{username}/databases/{name}
+    status_spesifikasi: tersedia
+    destruktif: true
+    asinkron: false
+    dipakai_untuk: [cleanup]
+
+  - id: hosting.php.details
+    operation_id: hosting_getPHPDetailsV1
+    method: GET
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/php/details
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [inventory, samakan_php]
+
+  - id: hosting.php.version.update
+    operation_id: hosting_updatePHPVersionV1
+    method: PATCH
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/php/version
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [samakan_php]
+
+  - id: hosting.php.extensions.update
+    operation_id: hosting_updatePHPExtensionsV1
+    method: PATCH
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/php/extensions
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [samakan_php]
+
+  - id: hosting.php.options.update
+    operation_id: hosting_updatePHPOptionsV1
+    method: PATCH
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/php/options
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [samakan_php]
+
+  - id: hosting.ssl.setup
+    operation_id: hosting_installSSLV1
+    method: POST
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/ssl/setup
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: true
+    polling: hosting.ssl.status
+    dipakai_untuk: [API_SSL]
+    catatan: 422 untuk subdomain gratis dan saat instalasi sedang berjalan.
+
+  - id: hosting.ssl.status
+    operation_id: hosting_getSSLStatusV1
+    method: GET
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/ssl/status
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [API_SSL, verifikasi_akhir]
+    nilai_status: [not_installed, installing, waiting_for_retry, active, expired, failed]
+
+  - id: hosting.ssl.https_redirect.toggle
+    operation_id: hosting_toggleHTTPSRedirectV1
+    method: PATCH
+    path: /api/hosting/v1/accounts/{username}/websites/{domain}/ssl/https-redirect/toggle
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [samakan_redirect_https]
+
+  - id: hosting.cron_jobs.list
+    operation_id: hosting_listAccountCronJobsV1
+    method: GET
+    path: /api/hosting/v1/accounts/{username}/cron-jobs
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [inventory]
+
+  - id: hosting.cron_jobs.create
+    operation_id: hosting_createAccountCronJobV1
+    method: POST
+    path: /api/hosting/v1/accounts/{username}/cron-jobs
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [pindah_cron]
+
+  - id: hosting.cron_jobs.delete
+    operation_id: hosting_deleteAccountCronJobV1
+    method: DELETE
+    path: /api/hosting/v1/accounts/{username}/cron-jobs/{uid}
+    status_spesifikasi: tersedia
+    destruktif: true
+    asinkron: false
+    dipakai_untuk: [cleanup]
+
+  - id: hosting.files.list
+    operation_id: hosting_listWebsiteFilesAndDirectoriesV1
+    method: GET
+    path: /api/hosting/v1/accounts/{username}/domains/{domain}/files
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [cadangan_deteksi_tipe_tanpa_ssh]
+    catatan: Hanya di bawah document root, tidak mencakup folder di luar public_html.
+
+tidak_tersedia_untuk_shared:
+  - operasi: ganti_domain_website
+    kode: API_CHANGE_DOMAIN
+    catatan: Hanya ada di agency-hosting (agency-hosting_changeWebsiteDomainV1). Tidak boleh dipakai.
+  - operasi: tambah_ssh_key_login
+    kode: SSH
+    catatan: Tidak ada endpoint SSH key untuk login Shared Hosting. hosting_generateGitSSHKeyV1 khusus deploy Git dan tidak dipakai.
+  - operasi: info_ssh_host_port
+    kode: SSH
+    catatan: Tidak ada field host, port, atau IP SSH di resource Shared Hosting. Operator menyalin dari hPanel.
+  - operasi: kuota_disk_inode_website
+    kode: QUOTA
+    catatan: Metrik hanya ada di agency-hosting. Shared Hosting memakai SSH (df, du, quota) atau konfirmasi operator.
+  - operasi: download_backup_website
+    kode: MANUAL_BACKUP
+    catatan: Tidak ada endpoint export atau download file dan database.
+  - operasi: ip_server_website
+    kode: VERIFY
+    catatan: Tidak ada field IP server. Diambil dari resolusi DNS subdomain dummy atau dari SSH.

@@ -1,0 +1,95 @@
+sumber:
+  spesifikasi: https://developers.hostinger.com/openapi/openapi.json
+  versi_spesifikasi: 3.4.2
+  sha256: 308dd885267f149d360ec47c9899300e911a5db2b46af0d874601efdcc8f6227
+  diunduh: 2026-11-22
+  base_url: https://developers.hostinger.com
+  autentikasi: bearer_token_hpanel
+  namespace: dns
+
+endpoint:
+  - id: dns.zones.get
+    operation_id: DNS_getDNSRecordsV1
+    method: GET
+    path: /api/dns/v1/zones/{domain}
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [API_DNS_READ, inventory, snapshot_lokal]
+    tipe_record: [A, AAAA, CNAME, ALIAS, MX, TXT, NS, SOA, SRV, CAA]
+
+  - id: dns.zones.update
+    operation_id: DNS_updateDNSRecordsV1
+    method: PUT
+    path: /api/dns/v1/zones/{domain}
+    status_spesifikasi: tersedia
+    destruktif: true
+    asinkron: false
+    dipakai_untuk: [API_DNS_WRITE, cutover_dns, dns_email]
+    catatan: Default overwrite true mengganti RR dengan name dan type yang sama. Migrator hanya mengirim RR yang diubah (A, AAAA, MX, TXT SPF, DKIM, DMARC) agar record pihak ketiga tetap ada. Wajib lewat gerbang konfirmasi.
+
+  - id: dns.zones.validate
+    operation_id: DNS_validateDNSRecordsV1
+    method: POST
+    path: /api/dns/v1/zones/{domain}/validate
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [dry_run_dns]
+
+  - id: dns.zones.delete_records
+    operation_id: DNS_deleteDNSRecordsV1
+    method: DELETE
+    path: /api/dns/v1/zones/{domain}
+    status_spesifikasi: tersedia
+    destruktif: true
+    asinkron: false
+    dipakai_untuk: []
+    catatan: Tidak dipakai di v1.
+
+  - id: dns.zones.reset
+    operation_id: DNS_resetDNSRecordsV1
+    method: POST
+    path: /api/dns/v1/zones/{domain}/reset
+    status_spesifikasi: tersedia
+    destruktif: true
+    asinkron: false
+    dipakai_untuk: []
+    catatan: Dilarang dipakai.
+
+  - id: dns.snapshots.list
+    operation_id: DNS_getDNSSnapshotListV1
+    method: GET
+    path: /api/dns/v1/snapshots/{domain}
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [API_DNS_SNAPSHOT]
+    catatan: Tidak ada endpoint membuat snapshot. Snapshot dibuat otomatis oleh Hostinger saat zone berubah (field reason). Migrator menyimpan JSON zone lokal sebelum perubahan sebagai sumber rollback utama.
+
+  - id: dns.snapshots.get
+    operation_id: DNS_getDNSSnapshotV1
+    method: GET
+    path: /api/dns/v1/snapshots/{domain}/{snapshotId}
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [API_DNS_SNAPSHOT, laporan_dns_sebelum_sesudah]
+
+  - id: dns.snapshots.restore
+    operation_id: DNS_restoreDNSSnapshotV1
+    method: POST
+    path: /api/dns/v1/snapshots/{domain}/{snapshotId}/restore
+    status_spesifikasi: tersedia
+    destruktif: true
+    asinkron: false
+    dipakai_untuk: [rollback]
+
+  - id: dns.propagation.check
+    operation_id: DNS_checkDNSRecordPropagationV1
+    method: GET
+    path: /api/dns/v1/propagation/{domain}/{type}
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [tunggu_dns_sebelum_ssl, verifikasi_akhir]

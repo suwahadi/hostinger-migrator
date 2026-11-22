@@ -1,0 +1,80 @@
+sumber:
+  spesifikasi: https://api.mail.hostinger.com/openapi/openapi.json
+  versi_spesifikasi: 1.3.0
+  sha256: 2ca5002f353d19cc32da6fc007f978dfef78a63d16f4f20ae9ac63ad0ff51bd5
+  diunduh: 2026-11-22
+  base_url: https://api.mail.hostinger.com
+  autentikasi: bearer_token_mail_api
+  cakupan: Isi mailbox (folder dan pesan). Token terpisah dari token hPanel, satu token per order email, dibuat di Agentic Mail.
+
+endpoint:
+  - id: mailapi.me
+    operation_id: getCurrentAccount
+    method: GET
+    path: /api/v1/me
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [validasi_token_mail, daftar_mailbox_resource_id]
+
+  - id: mailapi.folders.list
+    operation_id: listFolders
+    method: GET
+    path: /api/v1/mailboxes/{mailboxResourceId}/folders
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    paginasi: true
+    dipakai_untuk: [inventory_email, manifest_email, verifikasi_email]
+
+  - id: mailapi.folders.create
+    operation_id: createFolder
+    method: POST
+    path: /api/v1/mailboxes/{mailboxResourceId}/folders
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [restore_struktur_folder]
+
+  - id: mailapi.messages.list
+    operation_id: listMessages
+    method: GET
+    path: /api/v1/mailboxes/{mailboxResourceId}/folders/{folder}/messages
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    paginasi: true
+    dipakai_untuk: [backup_email, hitung_pesan]
+
+  - id: mailapi.messages.source
+    operation_id: getMessageSource
+    method: GET
+    path: /api/v1/mailboxes/{mailboxResourceId}/folders/{folder}/messages/{uid}/source
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [API_EMAIL_BACKUP]
+    catatan: Mengembalikan RFC822 mentah (.eml) termasuk lampiran. Tidak mengubah flag Seen.
+
+  - id: mailapi.messages.get
+    operation_id: getMessage
+    method: GET
+    path: /api/v1/mailboxes/{mailboxResourceId}/folders/{folder}/messages/{uid}
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [backup_flag_pesan]
+
+  - id: mailapi.quota.get
+    operation_id: getQuota
+    method: GET
+    path: /api/v1/mailboxes/{mailboxResourceId}/quota
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [cek_kapasitas_tujuan]
+
+tidak_tersedia:
+  - operasi: upload_atau_append_pesan
+    kode: API_EMAIL_RESTORE
+    catatan: Tidak ada endpoint untuk memasukkan pesan .eml ke mailbox. Restore harus lewat IMAP APPEND atau fitur Email Import hPanel.

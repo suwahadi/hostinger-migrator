@@ -1,0 +1,39 @@
+sumber:
+  spesifikasi: https://developers.hostinger.com/openapi/openapi.json
+  versi_spesifikasi: 3.4.2
+  sha256: 308dd885267f149d360ec47c9899300e911a5db2b46af0d874601efdcc8f6227
+  diunduh: 2026-11-22
+  base_url: https://developers.hostinger.com
+  autentikasi: bearer_token_hpanel
+  namespace: domains
+
+endpoint:
+  - id: domains.portfolio.list
+    operation_id: domains_getDomainListV1
+    method: GET
+    path: /api/domains/v1/portfolio
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [inventory, status_domain]
+    nilai_status: [active, pending_setup, expired, requested, pending_verification, deleted, suspended, failed]
+    catatan: Hanya domain yang terdaftar di akun token tersebut. Domain di registrar lain tidak muncul.
+
+  - id: domains.portfolio.get
+    operation_id: domains_getDomainDetailsV1
+    method: GET
+    path: /api/domains/v1/portfolio/{domain}
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [status_domain, deteksi_ns_eksternal]
+
+  - id: domains.portfolio.nameservers.update
+    operation_id: domains_updateDomainNameserversV1
+    method: PUT
+    path: /api/domains/v1/portfolio/{domain}/nameservers
+    status_spesifikasi: tersedia
+    destruktif: true
+    asinkron: false
+    dipakai_untuk: []
+    catatan: Tidak dipakai di v1. Registrar dan nameserver tidak diubah.

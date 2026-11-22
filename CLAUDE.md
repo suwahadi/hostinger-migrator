@@ -44,10 +44,19 @@ Dokumen acuan utama: [`docs/PRD.md`](docs/PRD.md). Baca bagian 19 PRD dan file i
 - Fase kerja: 0 (riset kontrak API) → 1 (fondasi) → 2 (SSH & audit) → 3 (inventory, detector, planner) → 4 (backup, provisioning, restore, verifikasi) → 5 (tipe lain + cutover) → 6 (email) → 7 (cleanup & laporan) → 8 (uji skala & rilis).
 - Jangan lompat fase sebelum DoD fase sebelumnya lulus dan dilaporkan.
 
-## D. Status Proyek
+## D. Keputusan Operator (22 November 2026)
+
+| # | Keputusan |
+|---|---|
+| K1 | Path modul Go: `hostinger-migrator` (nama lokal, bukan URL GitHub). |
+| K2 | Uji API dilakukan agent memakai token **akun uji** yang diberikan operator (bukan produksi). Token tidak boleh ditulis ke repo, log, atau commit. Operasi tulis tetap hanya ke akun/website uji. |
+| K3 | Langkah/endpoint backup-restore email yang pernah dipakai operator dipetakan sejak Fase 0. |
+| K4 | Token uji dibaca dari environment variable `HOSTINGER_TEST_TOKEN_SUMBER`, `HOSTINGER_TEST_TOKEN_TUJUAN`, `HOSTINGER_TEST_MAIL_TOKEN`. Jangan pernah meminta token ditempel di chat. |
+
+## E. Status Proyek
 
 | Fase | Status |
 |---|---|
 | Persiapan dokumen (PRD, CLAUDE.md, AGENT.md, README.md) | Selesai |
-| Fase 0 — Riset kontrak API | Menunggu persetujuan operator |
+| Fase 0 — Riset kontrak API | Dokumen selesai (`docs/api-shared-hosting.md`, `contracts/*.yaml`), menunggu jawaban pertanyaan operator |
 | Fase 1–8 | Belum dimulai |

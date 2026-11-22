@@ -1,0 +1,171 @@
+sumber:
+  spesifikasi: https://developers.hostinger.com/openapi/openapi.json
+  versi_spesifikasi: 3.4.2
+  sha256: 308dd885267f149d360ec47c9899300e911a5db2b46af0d874601efdcc8f6227
+  diunduh: 2026-11-22
+  base_url: https://developers.hostinger.com
+  autentikasi: bearer_token_hpanel
+  namespace: mail
+  cakupan: Pengelolaan layanan Hostinger Email (order, mailbox, alias, forwarder, catch-all, auto-reply). Tidak menyentuh isi pesan.
+
+endpoint:
+  - id: mail.orders.list
+    operation_id: mail_listOrdersV1
+    method: GET
+    path: /api/mail/v1/orders
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    paginasi: true
+    filter: [domain, status, is_trial, sort]
+    dipakai_untuk: [inventory_email, cek_layanan_email_tujuan]
+
+  - id: mail.orders.plan
+    operation_id: mail_getOrderPlanV1
+    method: GET
+    path: /api/mail/v1/orders/{orderId}/plan
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [kuota_email]
+
+  - id: mail.mailboxes.list
+    operation_id: mail_listMailboxesV1
+    method: GET
+    path: /api/mail/v1/orders/{orderId}/mailboxes
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    paginasi: true
+    dipakai_untuk: [inventory_email, verifikasi_mailbox_tujuan]
+    field_penting: [id, address, status, protocols, counts, is_catchall, usage]
+
+  - id: mail.mailboxes.create
+    operation_id: mail_createMailboxV1
+    method: POST
+    path: /api/mail/v1/orders/{orderId}/mailboxes
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [API_EMAIL_CREATE]
+    body_wajib: [local_part, password]
+    catatan: Password wajib diisi teks biasa (8-50 karakter, huruf besar, kecil, angka, simbol). Tidak ada cara memindahkan hash password lama.
+
+  - id: mail.mailboxes.delete
+    operation_id: mail_deleteMailboxV1
+    method: DELETE
+    path: /api/mail/v1/mailboxes/{mailboxId}
+    status_spesifikasi: tersedia
+    destruktif: true
+    asinkron: false
+    dipakai_untuk: [API_EMAIL_DELETE]
+    catatan: Soft delete, bisa dipulihkan dalam periode terbatas. Wajib lewat gerbang konfirmasi.
+
+  - id: mail.mailboxes.password.change
+    operation_id: mail_changeMailboxPasswordV1
+    method: PATCH
+    path: /api/mail/v1/mailboxes/{mailboxId}/password
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [set_password_lama_dari_operator]
+
+  - id: mail.aliases.list
+    operation_id: mail_listAliasesV1
+    method: GET
+    path: /api/mail/v1/orders/{orderId}/aliases
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [inventory_email]
+
+  - id: mail.aliases.create
+    operation_id: mail_createAliasV1
+    method: POST
+    path: /api/mail/v1/mailboxes/{mailboxId}/aliases
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [restore_alias]
+
+  - id: mail.forwarders.list
+    operation_id: mail_listForwardersV1
+    method: GET
+    path: /api/mail/v1/orders/{orderId}/forwarders
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [inventory_email]
+
+  - id: mail.forwarders.create
+    operation_id: mail_createForwarderV1
+    method: POST
+    path: /api/mail/v1/mailboxes/{mailboxId}/forwarders
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [restore_forwarder]
+    catatan: Tujuan forwarder perlu konfirmasi ulang (is_confirmed).
+
+  - id: mail.catchalls.list
+    operation_id: mail_listCatchAllsV1
+    method: GET
+    path: /api/mail/v1/orders/{orderId}/catchalls
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [inventory_email]
+
+  - id: mail.catchalls.create
+    operation_id: mail_createCatchAllV1
+    method: POST
+    path: /api/mail/v1/mailboxes/{mailboxId}/catchalls
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [restore_catchall]
+
+  - id: mail.autoreplies.list
+    operation_id: mail_listAutorepliesV1
+    method: GET
+    path: /api/mail/v1/orders/{orderId}/autoreplies
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [inventory_email]
+
+  - id: mail.autoreplies.create
+    operation_id: mail_createAutoreplyV1
+    method: POST
+    path: /api/mail/v1/mailboxes/{mailboxId}/autoreplies
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [restore_autoreply]
+
+  - id: mail.api_tokens.create
+    operation_id: mail_createAPITokenV1
+    method: POST
+    path: /api/mail/v1/orders/{orderId}/api-tokens
+    status_spesifikasi: tersedia
+    destruktif: false
+    asinkron: false
+    dipakai_untuk: [buat_token_mail_api_otomatis]
+    catatan: Kandidat untuk membuat token Mail API tanpa hPanel. Ketersediaan di paket Free Business Email belum jelas.
+
+  - id: mail.api_tokens.revoke
+    operation_id: mail_revokeAPITokenV1
+    method: DELETE
+    path: /api/mail/v1/api-tokens/{tokenId}
+    status_spesifikasi: tersedia
+    destruktif: true
+    asinkron: false
+    dipakai_untuk: [cabut_token_mail_api_setelah_selesai]
+
+tidak_tersedia:
+  - operasi: hapus_layanan_email_domain
+    catatan: Tidak ada endpoint menghapus order email atau melepas domain dari layanan email. Checkpoint manual.
+  - operasi: buat_layanan_email_di_akun_tujuan
+    catatan: Tidak ada endpoint membuat order email atau mengaktifkan Free Business Email untuk domain. Checkpoint manual MANUAL_EMAIL_SETUP.
+  - operasi: nilai_dns_email_tujuan
+    catatan: Tidak ada endpoint yang mengembalikan nilai MX, SPF, DKIM yang dibutuhkan order tujuan. Diambil dari dokumentasi atau hPanel.
