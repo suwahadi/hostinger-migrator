@@ -18,6 +18,10 @@ type Server struct {
 	EchoTokenInError bool
 	Orders           []hostinger.Order
 	Websites         []hostinger.Website
+	Zones            map[string][]map[string]any
+	Databases        map[string][]map[string]any
+	MailOrders       []map[string]any
+	MailStatus       int
 	hits             map[string]int
 }
 
@@ -35,6 +39,16 @@ func New(tls bool, validTokens ...string) *Server {
 		{Domain: "toko.id", Username: "u494983133", OrderID: 101, VhostType: "addon", IsEnabled: true, RootDirectory: "/home/u494983133/domains/toko.id/public_html", WebsiteType: "other"},
 		{Domain: "contoh.com", Username: "u597522494", OrderID: 102, VhostType: "main", IsEnabled: false, RootDirectory: "/home/u597522494/domains/contoh.com/public_html", WebsiteType: "other"},
 	}
+	s.Zones = map[string][]map[string]any{
+		"domainanda.com": {
+			{"name": "@", "type": "A", "ttl": 14400, "records": []map[string]any{{"content": "1.2.3.4"}}},
+			{"name": "@", "type": "MX", "ttl": 14400, "records": []map[string]any{{"content": "10 mx1.hostinger.com"}}},
+		},
+	}
+	s.Databases = map[string][]map[string]any{
+		"u494983133": {{"name": "u494983133_wp", "user": "u494983133_wp", "domain": "domainanda.com"}},
+	}
+	s.MailOrders = []map[string]any{{"id": "mo-1", "status": "active"}}
 	h := http.HandlerFunc(s.serve)
 	if tls {
 		s.Server = httptest.NewTLSServer(h)
@@ -81,11 +95,57 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	case "/api/hosting/v1/orders":
 		writePage(w, r, s.Orders)
 	case "/api/hosting/v1/websites":
-		writePage(w, r, s.Websites)
+		sites := s.Websites
+		if u := r.URL.Query().Get("username"); u != "" {
+			sites = nil
+			for _, x := range s.Websites {
+				if x.Username == u {
+					sites = append(sites, x)
+				}
+			}
+		}
+		writePage(w, r, sites)
+	case "/api/mail/v1/orders":
+		if s.MailStatus != 0 {
+			w.WriteHeader(s.MailStatus)
+			w.Write([]byte(`{"message":"Forbidden"}`))
+			return
+		}
+		writePage(w, r, s.MailOrders)
 	default:
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"message":"Not found"}`))
+		s.serveDynamic(w, r)
 	}
+}
+
+func (s *Server) serveDynamic(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+	switch {
+	case strings.HasPrefix(path, "/api/dns/v1/zones/"):
+		zone, ok := s.Zones[strings.TrimPrefix(path, "/api/dns/v1/zones/")]
+		if !ok {
+			notFound(w)
+			return
+		}
+		json.NewEncoder(w).Encode(zone)
+		return
+	case strings.HasPrefix(path, "/api/dns/v1/snapshots/"):
+		if _, ok := s.Zones[strings.TrimPrefix(path, "/api/dns/v1/snapshots/")]; !ok {
+			notFound(w)
+			return
+		}
+		w.Write([]byte(`[{"id":1,"reason":"awal","created_at":"2026-11-01T00:00:00Z"}]`))
+		return
+	case strings.HasPrefix(path, "/api/hosting/v1/accounts/") && strings.HasSuffix(path, "/databases"):
+		user := strings.TrimSuffix(strings.TrimPrefix(path, "/api/hosting/v1/accounts/"), "/databases")
+		writePage(w, r, s.Databases[user])
+		return
+	}
+	notFound(w)
+}
+
+func notFound(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNotFound)
+	w.Write([]byte(`{"message":"Not found"}`))
 }
 
 func writePage[T any](w http.ResponseWriter, r *http.Request, all []T) {

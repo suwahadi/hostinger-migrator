@@ -23,7 +23,7 @@ var mainMenu = []menuEntry{
 	{"7", "Laporan", 7},
 }
 
-const implementedPhase = 1
+const implementedPhase = 2
 
 func (a *App) runWizard(ctx context.Context) error {
 	for {
@@ -48,6 +48,10 @@ func (a *App) runWizard(ctx context.Context) error {
 			return nil
 		case "1":
 			if err := a.tokenMenu(ctx); err != nil {
+				return err
+			}
+		case "2":
+			if err := a.sshMenu(ctx); err != nil {
 				return err
 			}
 		default:
@@ -143,6 +147,86 @@ func (a *App) pickAlias(ctx context.Context, prompt string) (string, error) {
 	}
 	if v != "" {
 		a.println("Alias tidak ditemukan.")
+	}
+	return "", nil
+}
+
+func (a *App) sshMenu(ctx context.Context) error {
+	for {
+		a.println()
+		a.println("SIAPKAN SSH KEY & AUDIT")
+		a.println("1. Setup SSH semua akun yang belum siap")
+		a.println("2. Setup SSH satu akun")
+		a.println("3. Tes SSH semua akun")
+		a.println("4. Audit kapabilitas (read-only)")
+		a.println("5. Hapus password SSH cadangan")
+		a.println("0. Kembali")
+		choice, err := a.prompt.Line("Pilih: ")
+		if err != nil {
+			return err
+		}
+		var actionErr error
+		switch strings.TrimSpace(choice) {
+		case "0":
+			return nil
+		case "1":
+			actionErr = a.sshSetup(ctx, "", false)
+		case "2":
+			id, err := a.pickAccount(ctx)
+			if err != nil {
+				return err
+			}
+			if id != "" {
+				actionErr = a.sshSetup(ctx, id, false)
+			}
+		case "3":
+			actionErr = a.sshTest(ctx, "")
+		case "4":
+			actionErr = a.runAudit(ctx, "")
+		case "5":
+			id, err := a.pickAccount(ctx)
+			if err != nil {
+				return err
+			}
+			if id != "" {
+				actionErr = a.sshRemovePassword(ctx, id)
+			}
+		default:
+			a.println("Pilihan tidak dikenal.")
+		}
+		if actionErr != nil {
+			if errors.Is(actionErr, ErrInputClosed) {
+				return actionErr
+			}
+			fmt.Fprintln(a.env.Stderr, "ERROR: "+a.redactor.String(actionErr.Error()))
+		}
+	}
+}
+
+func (a *App) pickAccount(ctx context.Context) (string, error) {
+	all, err := a.store.ListSSH(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(all) == 0 {
+		a.println("Belum ada akun hosting. Tambahkan token dulu di menu 1.")
+		return "", nil
+	}
+	for i, info := range all {
+		a.printf("%d. %s (%s, SSH %s)\n", i+1, info.AccountID, PlanLabel(info.Plan), info.Status)
+	}
+	v, err := a.prompt.Line("Pilih akun: ")
+	if err != nil {
+		return "", err
+	}
+	v = strings.TrimSpace(v)
+	for i, info := range all {
+		if v == fmt.Sprint(i+1) || v == info.AccountID {
+			return info.AccountID, nil
+		}
+	}
+	if v != "" {
+		a.println("Akun tidak ditemukan.")
 	}
 	return "", nil
 }

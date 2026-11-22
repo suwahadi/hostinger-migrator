@@ -71,3 +71,33 @@ func TestBackendErrorIsRedacted(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestSSHPasswordSeparateFromToken(t *testing.T) {
+	r := logx.NewRedactor()
+	b := NewMemoryBackend()
+	s := New(b, r)
+	if err := s.SetToken("u111", tok); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetSSHPassword("u111", "Sandi-SSH-9876"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := s.Token("u111"); v != tok {
+		t.Fatal("token tertimpa password SSH")
+	}
+	if v, _ := s.SSHPassword("u111"); v != "Sandi-SSH-9876" {
+		t.Fatal("password SSH salah")
+	}
+	if strings.Contains(r.String("x Sandi-SSH-9876"), "Sandi-SSH-9876") {
+		t.Fatal("password SSH harus disaring dari log")
+	}
+	if err := s.DeleteSSHPassword("u111"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SSHPassword("u111"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+	if err := s.SetSSHPassword("U 1", "x"); err == nil {
+		t.Fatal("id akun tidak valid harus ditolak")
+	}
+}

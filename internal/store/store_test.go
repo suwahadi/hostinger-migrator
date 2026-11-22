@@ -4,8 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io/fs"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
+
+	sqlmigrations "hostinger-migrator/migrations/sqlite"
 )
 
 func openTest(t *testing.T) *Store {
@@ -31,8 +36,9 @@ func TestOpenAppliesPragmasAndMigrations(t *testing.T) {
 		t.Fatalf("busy_timeout = %s", v)
 	}
 	got, err := s.AppliedMigrations(ctx)
-	if err != nil || len(got) != 1 || got[0] != "0001_skema_awal" {
-		t.Fatalf("migrasi = %v, %v", got, err)
+	want := expectedMigrations(t)
+	if err != nil || strings.Join(got, ",") != strings.Join(want, ",") || got[0] != "0001_skema_awal" {
+		t.Fatalf("migrasi = %v, harus %v, %v", got, want, err)
 	}
 	for _, table := range []string{"credentials", "hosting_accounts", "capabilities", "websites", "databases", "mailboxes", "dns_snapshots", "batches", "items", "steps", "artifacts", "verifications", "manual_tasks", "approvals", "audit_log", "worker_lock"} {
 		var n int
@@ -40,6 +46,19 @@ func TestOpenAppliesPragmasAndMigrations(t *testing.T) {
 			t.Errorf("tabel %s tidak ada", table)
 		}
 	}
+}
+
+func expectedMigrations(t *testing.T) []string {
+	t.Helper()
+	names, err := fs.Glob(sqlmigrations.Files, "*.sql")
+	if err != nil || len(names) == 0 {
+		t.Fatal("file migrasi tidak ditemukan")
+	}
+	sort.Strings(names)
+	for i := range names {
+		names[i] = strings.TrimSuffix(names[i], ".sql")
+	}
+	return names
 }
 
 func TestMigrateIdempotent(t *testing.T) {
@@ -59,7 +78,7 @@ func TestMigrateIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := s2.AppliedMigrations(ctx)
-	if len(got) != 1 {
+	if len(got) != len(expectedMigrations(t)) {
 		t.Fatalf("migrasi berulang: %v", got)
 	}
 }

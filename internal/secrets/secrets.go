@@ -155,3 +155,43 @@ func (m *MemoryBackend) Delete(service, user string) error {
 func (m *MemoryBackend) Len() int {
 	return len(m.data)
 }
+
+var accountPattern = regexp.MustCompile(`^[a-z0-9_]{1,32}$`)
+
+func sshPasswordKey(accountID string) string {
+	return "ssh-password:" + accountID
+}
+
+func (s *Store) SetSSHPassword(accountID, password string) error {
+	if !accountPattern.MatchString(accountID) {
+		return fmt.Errorf("id akun hosting %q tidak valid", accountID)
+	}
+	if password == "" {
+		return errors.New("password SSH kosong")
+	}
+	s.redactor.Add(password)
+	if err := s.backend.Set(Service, sshPasswordKey(accountID), password); err != nil {
+		return fmt.Errorf("gagal menyimpan password SSH ke Credential Manager: %s", s.redactor.String(err.Error()))
+	}
+	return nil
+}
+
+func (s *Store) SSHPassword(accountID string) (string, error) {
+	v, err := s.backend.Get(Service, sshPasswordKey(accountID))
+	if errors.Is(err, keyring.ErrNotFound) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("gagal membaca password SSH dari Credential Manager: %s", s.redactor.String(err.Error()))
+	}
+	s.redactor.Add(v)
+	return v, nil
+}
+
+func (s *Store) DeleteSSHPassword(accountID string) error {
+	err := s.backend.Delete(Service, sshPasswordKey(accountID))
+	if errors.Is(err, keyring.ErrNotFound) {
+		return ErrNotFound
+	}
+	return err
+}

@@ -2,7 +2,7 @@
 
 Alat baris perintah (CLI) untuk memindahkan website beserta layanan terkait — file, database, DNS, SSL, dan email — dari satu akun Hostinger Shared Hosting ke akun Hostinger lain secara otomatis, aman, bisa dilanjutkan setelah gangguan, dan menghasilkan laporan lengkap dalam bahasa Indonesia.
 
-> **Status:** Fase 1 (fondasi) selesai — kelola API token sudah bisa dipakai. Fitur migrasi dikerjakan bertahap di fase berikutnya. Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md).
+> **Status:** Fase 2 selesai — kelola API token, setup SSH key, dan audit kapabilitas sudah bisa dipakai. Fitur migrasi dikerjakan bertahap di fase berikutnya. Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md).
 
 ## Fitur Utama (rencana v1)
 
@@ -57,6 +57,28 @@ go test ./...
 ./migrator.exe account remove xyz          # hapus token dari komputer ini saja
 ./migrator.exe version
 ```
+
+## Yang Sudah Bisa Dipakai (Fase 2)
+
+```bash
+./migrator.exe ssh setup                   # buat SSH key, pandu tempel di hPanel, tes koneksi semua akun
+./migrator.exe ssh setup u494983133        # atur ulang satu akun
+./migrator.exe ssh test                    # uji ulang SSH + SFTP semua akun
+./migrator.exe ssh remove-password u494983133   # hapus password SSH cadangan
+./migrator.exe audit                       # audit kapabilitas API + SSH (read-only) semua token
+./migrator.exe audit xyz                   # audit satu token
+```
+
+Langkah setup SSH per akun:
+
+1. hPanel → Advanced → SSH Access → pastikan SSH **Enabled**.
+2. Klik **Add SSH Key**, tempel baris `ssh-ed25519 ... hostinger-migrator` yang ditampilkan tool (sama untuk semua akun).
+3. Ketik `SELESAI`, lalu masukkan IP, port, dan username dari halaman SSH Access (port **tidak** selalu 22).
+4. Bila paket tidak mendukung key, ketik `PASSWORD` untuk memakai password SSH (disimpan di Credential Manager).
+
+Status audit: `SUPPORTED` = teruji nyata, `MANUAL` = ada jalur manual, `UNSUPPORTED` = tidak tersedia, `UNKNOWN` = belum terbukti (tidak pernah dianggap `SUPPORTED`).
+
+Setelah migrasi selesai, **hapus SSH key migrator** dari hPanel semua akun (SSH Access → Delete).
 
 Saat pertama kali dijalankan, `config.yaml` dan folder `data/` (database, log) dibuat di folder kerja.
 

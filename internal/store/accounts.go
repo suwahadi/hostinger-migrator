@@ -141,6 +141,15 @@ ON CONFLICT (id, alias) DO UPDATE SET
 		if err != nil {
 			return fmt.Errorf("gagal menyimpan akun hosting %s: %w", a.ID, err)
 		}
+		_, err = tx.ExecContext(ctx, `
+UPDATE hosting_accounts SET
+    ssh_host = src.ssh_host, ssh_port = src.ssh_port, ssh_user = src.ssh_user, ssh_fingerprint = src.ssh_fingerprint,
+    ssh_status = src.ssh_status, ssh_auth = src.ssh_auth, ssh_last_error = src.ssh_last_error, ssh_checked_at = src.ssh_checked_at, ssh_home = src.ssh_home
+FROM (SELECT * FROM hosting_accounts WHERE id = ? AND alias <> ? AND ssh_host IS NOT NULL LIMIT 1) AS src
+WHERE hosting_accounts.id = ? AND hosting_accounts.alias = ? AND hosting_accounts.ssh_host IS NULL`, a.ID, alias, a.ID, alias)
+		if err != nil {
+			return fmt.Errorf("gagal menyalin info SSH akun %s: %w", a.ID, err)
+		}
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT id FROM hosting_accounts WHERE alias = ?`, alias)
 	if err != nil {
