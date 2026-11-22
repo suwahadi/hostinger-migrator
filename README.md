@@ -25,6 +25,14 @@ Alat baris perintah (CLI) untuk memindahkan website beserta layanan terkait — 
 - Akun Hostinger Shared Hosting (Single, Premium, Business) dengan API token.
 - Akses SSH di hPanel (paket tanpa SSH memakai jalur manual).
 
+## Unduh
+
+Binary siap pakai untuk Windows x64 ada di [`dist/migrator.exe`](dist/migrator.exe). Checksum SHA-256 ada di [`dist/SHA256SUMS`](dist/SHA256SUMS). Cek di Git Bash dengan:
+
+```bash
+cd dist && sha256sum -c SHA256SUMS
+```
+
 ## Build
 
 Butuh Go 1.26 atau lebih baru (hanya untuk build, tidak perlu di komputer operator).

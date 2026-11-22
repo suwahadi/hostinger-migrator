@@ -1,8 +1,6 @@
 /migrator
 /migrator.exe
-*.exe
 /data/
 /config.yaml
-/dist/
 *.test
 *.out
