@@ -1,0 +1,20 @@
+storage:
+  data_dir: ./data
+api:
+  base_url: https://developers.hostinger.com
+  timeout_detik: 60
+  rate_per_menit: 60
+  retry_maks: 8
+worker:
+  website_paralel: 2
+  import_db_paralel_per_akun: 1
+backup:
+  retensi_hari: 30
+  final_sync_sebelum_cutover: true
+verifikasi:
+  timeout_http_detik: 30
+  min_asset_dicek: 3
+ssl:
+  batas_tunggu_menit: 60
+cleanup:
+  wajib_ssl_aktif: true

@@ -2,7 +2,7 @@
 
 Alat baris perintah (CLI) untuk memindahkan website beserta layanan terkait — file, database, DNS, SSL, dan email — dari satu akun Hostinger Shared Hosting ke akun Hostinger lain secara otomatis, aman, bisa dilanjutkan setelah gangguan, dan menghasilkan laporan lengkap dalam bahasa Indonesia.
 
-> **Status:** tahap perencanaan. Kode belum dibuat. Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md).
+> **Status:** Fase 1 (fondasi) selesai — kelola API token sudah bisa dipakai. Fitur migrasi dikerjakan bertahap di fase berikutnya. Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md).
 
 ## Fitur Utama (rencana v1)
 
@@ -25,7 +25,36 @@ Alat baris perintah (CLI) untuk memindahkan website beserta layanan terkait — 
 - Akun Hostinger Shared Hosting (Single, Premium, Business) dengan API token.
 - Akses SSH di hPanel (paket tanpa SSH memakai jalur manual).
 
-## Cara Pakai (rencana)
+## Build
+
+Butuh Go 1.26 atau lebih baru (hanya untuk build, tidak perlu di komputer operator).
+
+```bash
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=0.1.0" -o migrator.exe ./cmd/migrator
+```
+
+Uji:
+
+```bash
+go vet ./...
+go test ./...
+```
+
+## Yang Sudah Bisa Dipakai (Fase 1)
+
+```bash
+./migrator.exe account add                 # tambah token (input tersembunyi), validasi, temukan akun hosting
+./migrator.exe account list                # daftar token + akun hosting uXXXXXXXX
+./migrator.exe account test xyz            # uji ulang token
+./migrator.exe account remove xyz          # hapus token dari komputer ini saja
+./migrator.exe version
+```
+
+Saat pertama kali dijalankan, `config.yaml` dan folder `data/` (database, log) dibuat di folder kerja.
+
+Bila token terlihat saat diketik di Git Bash, jalankan lewat `winpty ./migrator.exe` agar input tersembunyi.
+
+## Cara Pakai (rencana lengkap)
 
 ```bash
 ./migrator.exe

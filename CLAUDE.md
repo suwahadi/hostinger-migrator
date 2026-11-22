@@ -58,7 +58,8 @@ Dokumen acuan utama: [`docs/PRD.md`](docs/PRD.md). Baca bagian 19 PRD dan file i
 | Fase | Status |
 |---|---|
 | Persiapan dokumen (PRD, CLAUDE.md, AGENT.md, README.md) | Selesai |
-| Fase 0 — Riset kontrak API | Selesai (`docs/api-shared-hosting.md`, `contracts/*.yaml`), menunggu persetujuan lanjut Fase 1 |
-| Fase 1–8 | Belum dimulai |
+| Fase 0 — Riset kontrak API | Selesai (`docs/api-shared-hosting.md`, `contracts/*.yaml`) |
+| Fase 1 — Fondasi | Selesai di sisi kode dan test; uji `migrator.exe` di Git Bash Windows dan token uji nyata menunggu operator |
+| Fase 2–8 | Belum dimulai, menunggu persetujuan operator |
 
 Keputusan email dan cutover: lihat `docs/decisions.md` D-008 sampai D-011 (password mailbox dibuat baru, restore via IMAP APPEND, Free Business Email).
