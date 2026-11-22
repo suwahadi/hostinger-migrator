@@ -101,3 +101,40 @@ func TestSSHPasswordSeparateFromToken(t *testing.T) {
 		t.Fatal("id akun tidak valid harus ditolak")
 	}
 }
+
+func TestGenericSecretsAndPassword(t *testing.T) {
+	r := logx.NewRedactor()
+	s := New(NewMemoryBackend(), r)
+	if err := s.Put(KindDBPassword, "u2:u2_wp", "Rahasia-DB-1"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := s.Get(KindDBPassword, "u2:u2_wp"); v != "Rahasia-DB-1" {
+		t.Fatal("rahasia salah")
+	}
+	if err := s.Put("", "x", "y"); err == nil {
+		t.Fatal("rahasia tidak lengkap harus ditolak")
+	}
+	if s.Delete(KindDBPassword, "u2:u2_wp") != nil {
+		t.Fatal("hapus gagal")
+	}
+	if _, err := s.Get(KindDBPassword, "u2:u2_wp"); !errors.Is(err, ErrNotFound) {
+		t.Fatal("harus hilang")
+	}
+	seen := map[string]bool{}
+	for i := 0; i < 50; i++ {
+		p, err := GeneratePassword(16)
+		if err != nil || len(p) != 16 {
+			t.Fatalf("p = %q %v", p, err)
+		}
+		if !strings.ContainsAny(p, lowerChars) || !strings.ContainsAny(p, upperChars) || !strings.ContainsAny(p, digitChars) || !strings.ContainsAny(p, symbolChars) {
+			t.Fatalf("kelas karakter kurang: %s", p)
+		}
+		if strings.ContainsAny(p, " '\"\\$`#") {
+			t.Fatalf("karakter berbahaya: %s", p)
+		}
+		seen[p] = true
+	}
+	if len(seen) < 50 {
+		t.Fatal("password tidak acak")
+	}
+}

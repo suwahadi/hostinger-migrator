@@ -203,6 +203,9 @@ func TestPlanDryRunThenSave(t *testing.T) {
 	if code != cli.ExitOK || !strings.Contains(out, "Ketik YAKIN") || !strings.Contains(out, "tersimpan dengan status PLANNED (2 website)") {
 		t.Fatalf("simpan (%d): %s%s", code, out, h.stderr.String())
 	}
+	if h.spawned != 1 {
+		t.Fatalf("worker harus dimulai setelah YAKIN, dipanggil %d kali", h.spawned)
+	}
 	bs := h.batches()
 	if len(bs) != 1 || !strings.HasPrefix(bs[0].ID, "MIG-") || bs[0].SourceAccount != "u494983133" || bs[0].DestAccount != "u73839202" {
 		t.Fatalf("batch = %+v", bs)

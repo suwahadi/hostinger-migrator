@@ -191,8 +191,7 @@ func (a *App) runPlan(ctx context.Context, o planOptions) error {
 		return err
 	}
 	a.printf("\nBatch %s tersimpan dengan status %s (%d website).\n", id, store.BatchPlanned, len(plan.ActiveItems()))
-	a.println("Eksekusi migrasi (worker background) tersedia di Fase 4.")
-	return nil
+	return a.startWorker(ctx, false)
 }
 
 func rejectError(p *planner.Plan) error {

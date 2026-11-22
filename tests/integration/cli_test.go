@@ -26,6 +26,7 @@ type harness struct {
 	config  string
 	srv     *fakehostinger.Server
 	backend *secrets.MemoryBackend
+	spawned int
 	stdout  bytes.Buffer
 	stderr  bytes.Buffer
 }
@@ -65,6 +66,10 @@ func (h *harness) run(stdin string, args ...string) int {
 		HTTPClient:     h.srv.Client(),
 		Redactor:       logx.NewRedactor(),
 		LookupNS:       fakeNS,
+		SpawnWorker: func(ctx context.Context, a *cli.App) error {
+			h.spawned++
+			return nil
+		},
 	}
 	return cli.Execute(append([]string{"--config", h.config}, args...), env)
 }
@@ -167,7 +172,7 @@ func TestRemoveRequiresConfirmation(t *testing.T) {
 
 func TestWizardFlow(t *testing.T) {
 	h := newHarness(t)
-	input := strings.Join([]string{"9", "5", "1", "1", goodToken, "wizard", "2", "0", "0"}, "\n") + "\n"
+	input := strings.Join([]string{"9", "7", "1", "1", goodToken, "wizard", "2", "0", "0"}, "\n") + "\n"
 	code := h.run(input)
 	out := h.stdout.String()
 	if code != cli.ExitOK {

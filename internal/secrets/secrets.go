@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"regexp"
@@ -194,4 +195,87 @@ func (s *Store) DeleteSSHPassword(accountID string) error {
 		return ErrNotFound
 	}
 	return err
+}
+
+const (
+	KindDBPassword      = "db-password"
+	KindMailboxPassword = "mailbox-password"
+)
+
+func (s *Store) Put(kind, id, value string) error {
+	if kind == "" || id == "" || value == "" {
+		return errors.New("rahasia tidak lengkap")
+	}
+	s.redactor.Add(value)
+	if err := s.backend.Set(Service, kind+":"+id, value); err != nil {
+		return fmt.Errorf("gagal menyimpan rahasia ke Credential Manager: %s", s.redactor.String(err.Error()))
+	}
+	return nil
+}
+
+func (s *Store) Get(kind, id string) (string, error) {
+	v, err := s.backend.Get(Service, kind+":"+id)
+	if errors.Is(err, keyring.ErrNotFound) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("gagal membaca rahasia dari Credential Manager: %s", s.redactor.String(err.Error()))
+	}
+	s.redactor.Add(v)
+	return v, nil
+}
+
+func (s *Store) Delete(kind, id string) error {
+	err := s.backend.Delete(Service, kind+":"+id)
+	if errors.Is(err, keyring.ErrNotFound) {
+		return ErrNotFound
+	}
+	return err
+}
+
+const (
+	lowerChars  = "abcdefghijkmnopqrstuvwxyz"
+	upperChars  = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+	digitChars  = "23456789"
+	symbolChars = "-_.!@"
+)
+
+func GeneratePassword(n int) (string, error) {
+	if n < 12 {
+		n = 12
+	}
+	all := lowerChars + upperChars + digitChars + symbolChars
+	pick := func(set string) (byte, error) {
+		var b [1]byte
+		for {
+			if _, err := rand.Read(b[:]); err != nil {
+				return 0, err
+			}
+			if int(b[0]) < 256-256%len(set) {
+				return set[int(b[0])%len(set)], nil
+			}
+		}
+	}
+	out := make([]byte, n)
+	sets := []string{lowerChars, upperChars, digitChars, symbolChars}
+	for i := range out {
+		set := all
+		if i < len(sets) {
+			set = sets[i]
+		}
+		c, err := pick(set)
+		if err != nil {
+			return "", err
+		}
+		out[i] = c
+	}
+	for i := len(out) - 1; i > 0; i-- {
+		var b [1]byte
+		if _, err := rand.Read(b[:]); err != nil {
+			return "", err
+		}
+		j := int(b[0]) % (i + 1)
+		out[i], out[j] = out[j], out[i]
+	}
+	return string(out), nil
 }

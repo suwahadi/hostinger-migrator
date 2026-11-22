@@ -31,6 +31,7 @@ type DBRef struct {
 	Host        string
 	Source      string
 	HasPassword bool
+	Password    string `json:"-"`
 }
 
 type Result struct {
@@ -272,6 +273,7 @@ func parseWPConfig(content string) DBRef {
 			ref.Host = v
 		case "DB_PASSWORD":
 			ref.HasPassword = v != ""
+			ref.Password = v
 		}
 	}
 	return ref
@@ -314,7 +316,7 @@ func parseLaravelEnv(content string) DBRef {
 	if c := env["DB_CONNECTION"]; c != "" && c != "mysql" && c != "mariadb" {
 		return DBRef{}
 	}
-	return DBRef{Name: env["DB_DATABASE"], User: env["DB_USERNAME"], Host: env["DB_HOST"], HasPassword: env["DB_PASSWORD"] != ""}
+	return DBRef{Name: env["DB_DATABASE"], User: env["DB_USERNAME"], Host: env["DB_HOST"], HasPassword: env["DB_PASSWORD"] != "", Password: env["DB_PASSWORD"]}
 }
 
 func parseCI4Env(content string) DBRef {
@@ -324,6 +326,7 @@ func parseCI4Env(content string) DBRef {
 		User:        env["database.default.username"],
 		Host:        env["database.default.hostname"],
 		HasPassword: env["database.default.password"] != "",
+		Password:    env["database.default.password"],
 	}
 }
 
@@ -347,8 +350,9 @@ func parseCI3(content string) DBRef {
 				ref.Name = v
 			}
 		case "password":
-			if v != "" {
+			if v != "" && !ref.HasPassword {
 				ref.HasPassword = true
+				ref.Password = v
 			}
 		}
 	}
@@ -370,6 +374,7 @@ func parseJoomla(content string) DBRef {
 			ref.Name = v
 		case "password":
 			ref.HasPassword = v != ""
+			ref.Password = v
 		}
 	}
 	return ref

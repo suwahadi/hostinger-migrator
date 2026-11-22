@@ -113,7 +113,8 @@ func (c *Config) Validate() error {
 	if strings.TrimSpace(c.Storage.DataDir) == "" {
 		problems = append(problems, "storage.data_dir wajib diisi")
 	}
-	if !strings.HasPrefix(c.API.BaseURL, "https://") {
+	local := strings.HasPrefix(c.API.BaseURL, "http://127.0.0.1") || strings.HasPrefix(c.API.BaseURL, "http://localhost")
+	if !strings.HasPrefix(c.API.BaseURL, "https://") && !local {
 		problems = append(problems, "api.base_url harus diawali https://")
 	}
 	if c.API.TimeoutDetik < 1 {

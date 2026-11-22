@@ -2,6 +2,7 @@ package fakehostinger
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -31,12 +32,49 @@ type Server struct {
 	Mailboxes        map[string][]map[string]any
 	WebsitesFor      map[string][]hostinger.Website
 	OrdersFor        map[string][]hostinger.Order
+	OrderUsers       map[int64]string
+	SiteRoot         func(username, domain string) string
+	OnCreateDB       func(username, name, user, password string) error
+	OnboardingPolls  int
+	Fail             map[string]int
+	ZoneWrites       []map[string]any
+	freeCounter      int
+	onboardings      map[string]string
+	pollCount        map[string]int
 	hits             map[string]int
 	writes           int
 }
 
+func (s *Server) Lock()   { s.mu.Lock() }
+func (s *Server) Unlock() { s.mu.Unlock() }
+
+func (s *Server) SetFail(key string, status int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.Fail == nil {
+		s.Fail = map[string]int{}
+	}
+	s.Fail[key] = status
+}
+
+func (s *Server) failFor(key string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Fail[key]
+}
+
+func (s *Server) WebsitesOf(token string) []hostinger.Website {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ws, ok := s.WebsitesFor[token]; ok {
+		return append([]hostinger.Website(nil), ws...)
+	}
+	return append([]hostinger.Website(nil), s.Websites...)
+}
+
 func New(tls bool, validTokens ...string) *Server {
-	s := &Server{valid: map[string]bool{}, hits: map[string]int{}, WebsitesFor: map[string][]hostinger.Website{}, OrdersFor: map[string][]hostinger.Order{}}
+	s := &Server{valid: map[string]bool{}, hits: map[string]int{}, WebsitesFor: map[string][]hostinger.Website{}, OrdersFor: map[string][]hostinger.Order{},
+		OrderUsers: map[int64]string{}, onboardings: map[string]string{}, pollCount: map[string]int{}, Fail: map[string]int{}}
 	for _, t := range validTokens {
 		s.valid[t] = true
 	}
@@ -128,10 +166,28 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.writes++
 		s.mu.Unlock()
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		s.serveWrite(w, r, token)
 		return
 	}
 	switch r.URL.Path {
+	case "/api/hosting/v1/onboardings":
+		d := r.URL.Query().Get("domain")
+		s.mu.Lock()
+		st, ok := s.onboardings[d]
+		if ok && st == "running" {
+			s.pollCount[d]++
+			if s.pollCount[d] >= s.OnboardingPolls {
+				s.onboardings[d] = "completed"
+				st = "completed"
+			}
+		}
+		s.mu.Unlock()
+		if !ok {
+			w.Write([]byte("[]"))
+			return
+		}
+		json.NewEncoder(w).Encode([]map[string]any{{"domain": d, "username": "", "status": st, "created_at": "2026-11-22T00:00:00Z", "updated_at": "2026-11-22T00:00:00Z"}})
+		return
 	case "/api/hosting/v1/orders":
 		if o, ok := s.OrdersFor[token]; ok {
 			writePage(w, r, o)
@@ -254,4 +310,101 @@ func writePage[T any](w http.ResponseWriter, r *http.Request, all []T) {
 		"data": all[start:end],
 		"meta": map[string]int{"current_page": page, "per_page": per, "total": len(all)},
 	})
+}
+
+func (s *Server) serveWrite(w http.ResponseWriter, r *http.Request, token string) {
+	var body map[string]any
+	json.NewDecoder(r.Body).Decode(&body)
+	path := r.URL.Path
+	fail := func(key string) bool {
+		if code := s.failFor(key); code != 0 {
+			w.WriteHeader(code)
+			json.NewEncoder(w).Encode(map[string]string{"message": "gagal disimulasikan: " + key})
+			return true
+		}
+		return false
+	}
+	switch {
+	case r.Method == http.MethodPost && path == "/api/hosting/v1/domains/free-subdomains":
+		if fail("free-subdomain") {
+			return
+		}
+		s.mu.Lock()
+		s.freeCounter++
+		d := fmt.Sprintf("dummy-%d.hostingersite.com", s.freeCounter)
+		s.mu.Unlock()
+		json.NewEncoder(w).Encode(map[string]string{"domain": d})
+		return
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/hosting/v1/orders/") && strings.HasSuffix(path, "/onboardings"):
+		if fail("onboarding") {
+			return
+		}
+		id, _ := strconv.ParseInt(strings.TrimSuffix(strings.TrimPrefix(path, "/api/hosting/v1/orders/"), "/onboardings"), 10, 64)
+		domain, _ := body["domain"].(string)
+		s.mu.Lock()
+		user := s.OrderUsers[id]
+		if _, exists := s.onboardings[domain]; exists {
+			s.mu.Unlock()
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(`{"message":"sudah ada"}`))
+			return
+		}
+		status := "completed"
+		if s.OnboardingPolls > 0 {
+			status = "running"
+		}
+		s.onboardings[domain] = status
+		root := ""
+		if s.SiteRoot != nil {
+			root = s.SiteRoot(user, domain)
+		}
+		site := hostinger.Website{Domain: domain, Username: user, OrderID: id, VhostType: "addon", IsEnabled: true, RootDirectory: root, WebsiteType: "other"}
+		if _, ok := s.WebsitesFor[token]; ok {
+			s.WebsitesFor[token] = append(s.WebsitesFor[token], site)
+		} else {
+			s.Websites = append(s.Websites, site)
+		}
+		s.mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]any{"domain": domain, "username": user, "status": status, "created_at": "x", "updated_at": "x"})
+		return
+	case strings.HasPrefix(path, "/api/hosting/v1/accounts/"):
+		parts := strings.Split(strings.TrimPrefix(path, "/api/hosting/v1/accounts/"), "/")
+		user := parts[0]
+		switch {
+		case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "databases":
+			if fail("db-create") {
+				return
+			}
+			name, _ := body["name"].(string)
+			dbUser, _ := body["user"].(string)
+			pw, _ := body["password"].(string)
+			if !strings.HasPrefix(name, user+"_") {
+				name = user + "_" + name
+			}
+			if s.OnCreateDB != nil {
+				if err := s.OnCreateDB(user, name, dbUser, pw); err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+			}
+			s.mu.Lock()
+			s.Databases[user] = append(s.Databases[user], map[string]any{"name": name, "user": dbUser, "domain": body["website_domain"]})
+			s.mu.Unlock()
+			w.Write([]byte(`{"message":"ok"}`))
+			return
+		case r.Method == http.MethodPatch && len(parts) == 5 && parts[3] == "php" && parts[4] == "version":
+			if fail("php") {
+				return
+			}
+			v, _ := body["version"].(string)
+			s.mu.Lock()
+			s.PHP[parts[2]] = v
+			s.mu.Unlock()
+			w.Write([]byte(`{"message":"ok"}`))
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNotFound)
+	w.Write([]byte(`{"message":"endpoint tulis tidak disimulasikan"}`))
 }

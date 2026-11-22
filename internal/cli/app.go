@@ -15,6 +15,7 @@ import (
 	"hostinger-migrator/internal/config"
 	"hostinger-migrator/internal/hostinger"
 	"hostinger-migrator/internal/logx"
+	"hostinger-migrator/internal/pipeline"
 	"hostinger-migrator/internal/secrets"
 	"hostinger-migrator/internal/store"
 )
@@ -37,6 +38,8 @@ type Env struct {
 	Redactor       *logx.Redactor
 	Now            func() time.Time
 	LookupNS       func(ctx context.Context, domain string) ([]string, error)
+	SpawnWorker    func(ctx context.Context, a *App) error
+	RunnerHook     func(d *pipeline.Deps)
 }
 
 type App struct {

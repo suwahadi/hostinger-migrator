@@ -51,6 +51,7 @@ Dokumen acuan utama: [`docs/PRD.md`](docs/PRD.md). Baca bagian 19 PRD dan file i
 | K1 | Path modul Go: `hostinger-migrator` (nama lokal, bukan URL GitHub). |
 | K2 | Uji API dilakukan agent memakai token **akun uji** yang diberikan operator (bukan produksi). Token tidak boleh ditulis ke repo, log, atau commit. Operasi tulis tetap hanya ke akun/website uji. |
 | K3 | Langkah/endpoint backup-restore email yang pernah dipakai operator dipetakan sejak Fase 0. |
+| K5 | (22 Nov 2026) Operator menyetujui Fase 4–8 dikerjakan berturut-turut sampai selesai tanpa berhenti per fase. Hostinger tidak punya sandbox, sehingga pengujian memakai server tiruan in-process; verifikasi dengan token dan akun nyata dilakukan operator di komputernya. |
 | K4 | Token uji dibaca dari environment variable `HOSTINGER_TEST_TOKEN_SUMBER`, `HOSTINGER_TEST_TOKEN_TUJUAN`, `HOSTINGER_TEST_MAIL_TOKEN`. Jangan pernah meminta token ditempel di chat. |
 
 ## E. Status Proyek
