@@ -44,6 +44,7 @@ type Env struct {
 	RunnerHook     func(d *pipeline.Deps)
 	StageHook      func(s *cutover.Stage)
 	EmailHook      func(s *email.Stage)
+	Resolve        func(ctx context.Context, host string) ([]string, error)
 }
 
 type App struct {

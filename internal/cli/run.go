@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"hostinger-migrator/internal/backup"
+	"hostinger-migrator/internal/cleanup"
 	"hostinger-migrator/internal/cutover"
 	"hostinger-migrator/internal/email"
 	"hostinger-migrator/internal/pipeline"
@@ -43,7 +44,8 @@ func (a *App) runner() *pipeline.Runner {
 	}
 	cut := &cutover.Stage{FinalSync: a.cfg.Backup.FinalSyncSebelumCutover, SSLWait: time.Duration(a.cfg.SSL.BatasTungguMenit) * time.Minute}
 	mail := &email.Stage{IMAP: a.cfg.Email.IMAPHost, TLS: a.cfg.Email.IMAPTLS, Timeout: 2 * time.Minute}
-	d.Stages = []pipeline.Stage{cut, mail}
+	clean := &cleanup.Stage{Opts: a.cleanupOptions(false), Sleep: d.Sleep}
+	d.Stages = []pipeline.Stage{cut, mail, clean}
 	if a.env.RunnerHook != nil {
 		a.env.RunnerHook(&d)
 	}
@@ -57,6 +59,7 @@ func (a *App) runner() *pipeline.Runner {
 	r := pipeline.NewRunner(d)
 	cut.Runner = r
 	mail.Runner = r
+	clean.Runner = r
 	return r
 }
 
@@ -382,4 +385,5 @@ func (a *App) onBatchFinished(ctx context.Context, batchID string) {
 	if a.log != nil {
 		a.log.Info("batch selesai", "batch", batchID)
 	}
+	a.autoReport(ctx, batchID)
 }

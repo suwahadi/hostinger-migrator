@@ -126,6 +126,7 @@ func newRootCmd(app *App) *cobra.Command {
 	root.AddCommand(newWorkerCmds(app)...)
 	root.AddCommand(newCutoverCmds(app)...)
 	root.AddCommand(newEmailCmd(app))
+	root.AddCommand(newCleanupReportCmds(app)...)
 	return root
 }
 

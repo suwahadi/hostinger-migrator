@@ -57,6 +57,19 @@ func (h *runHarness) run(stdin string, args ...string) int {
 		StageHook: func(s *cutover.Stage) {
 			s.HTTPSScheme = "http"
 		},
+		Resolve: func(ctx context.Context, host string) ([]string, error) {
+			for _, rr := range h.e.API.Zone(host) {
+				if rr["name"] == "@" && rr["type"] == "A" {
+					if recs, ok := rr["records"].([]any); ok && len(recs) > 0 {
+						return []string{recs[0].(map[string]any)["content"].(string)}, nil
+					}
+					if recs, ok := rr["records"].([]map[string]any); ok && len(recs) > 0 {
+						return []string{recs[0]["content"].(string)}, nil
+					}
+				}
+			}
+			return nil, os.ErrNotExist
+		},
 		EmailHook: func(s *email.Stage) {
 			if h.e.IMAP != nil {
 				s.IMAP = h.e.IMAP.Addr()
@@ -256,4 +269,44 @@ func TestEmailCommands(t *testing.T) {
 		t.Fatalf("passwords: %s", out)
 	}
 	h.e.AssertNoSecretsOnDisk(testenv.MailOldInfo, testenv.MailOldAdmin)
+}
+
+func TestCleanupAndReportCommands(t *testing.T) {
+	h := newRunHarness(t)
+	h.e.Prepare("domainanda.com", "mati.com")
+	h.run("", "start")
+	code := h.run("", "cleanup")
+	out := h.stdout.String()
+	if code != cli.ExitOK || !strings.Contains(out, "Tertahan:") || !strings.Contains(out, "--termasuk-dummy") || !strings.Contains(out, "Tidak ada website yang lolos") {
+		t.Fatalf("cleanup awal (%d): %s", code, out)
+	}
+	h.run("CUTOVER\n", "cutover")
+	h.e.API.Lock()
+	for i, w := range h.e.API.WebsitesFor[testenv.SrcToken] {
+		if w.Domain == "domainanda.com" {
+			h.e.API.WebsitesFor[testenv.SrcToken][i].Domain = "sementara.hostingersite.com"
+		}
+	}
+	h.e.API.Unlock()
+	h.run("", "confirm", "MANUAL_SOURCE_RENAME", "domainanda.com", "--nilai", "sementara.hostingersite.com")
+	code = h.run("HAPUS\n", "cleanup", "--termasuk-dummy")
+	out = h.stdout.String()
+	if code != cli.ExitOK || !strings.Contains(out, "domainanda.com (website sumber: sementara.hostingersite.com)") || !strings.Contains(out, "Sumber mati.com (DUMMY_ONLY) dihapus") {
+		t.Fatalf("cleanup (%d): %s%s", code, out, h.stderr.String())
+	}
+	if it := h.e.Item("domainanda.com"); it.State != pipeline.StateCompleted {
+		t.Fatalf("status = %s %s", it.State, it.LastError)
+	}
+	if _, err := os.Stat(filepath.Join(h.e.DataDir, "reports")); err != nil {
+		t.Fatal("laporan otomatis harus dibuat saat batch selesai")
+	}
+	code = h.run("", "report", "--json")
+	out = h.stdout.String()
+	if code != cli.ExitOK || !strings.Contains(out, "LAPORAN MIG-") || !strings.Contains(out, "laporan.json") || strings.Contains(out, "laporan.html") || !strings.Contains(out, "PENGINGAT: hapus SSH key") {
+		t.Fatalf("report (%d): %s", code, out)
+	}
+	if code := h.run("", "report", "--batch", "MIG-TIDAK-ADA"); code != cli.ExitAction {
+		t.Fatalf("batch tidak ada harus exit 2, dapat %d", code)
+	}
+	h.e.AssertNoSecretsOnDisk(testenv.WPPassword, testenv.LVPassword, testenv.SrcToken, testenv.DstToken)
 }

@@ -647,3 +647,11 @@ func indexOf(s string) int {
 	}
 	return len(Order) + 1
 }
+
+func (r *Runner) Load(ctx context.Context, it *store.PipelineItem) (*ItemContext, error) {
+	return r.load(ctx, it)
+}
+
+func (ic *ItemContext) Close() {
+	ic.close()
+}

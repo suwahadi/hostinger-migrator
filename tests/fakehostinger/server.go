@@ -559,10 +559,47 @@ func (s *Server) serveWrite(w http.ResponseWriter, r *http.Request, token string
 		}
 		notFound(w)
 		return
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/hosting/v1/websites/"):
+		if fail("website-delete") {
+			return
+		}
+		d := strings.TrimPrefix(path, "/api/hosting/v1/websites/")
+		s.mu.Lock()
+		removed := false
+		for tok, list := range s.WebsitesFor {
+			var keep []hostinger.Website
+			for _, w := range list {
+				if strings.EqualFold(w.Domain, d) {
+					removed = true
+					continue
+				}
+				keep = append(keep, w)
+			}
+			s.WebsitesFor[tok] = keep
+		}
+		s.mu.Unlock()
+		if !removed {
+			notFound(w)
+			return
+		}
+		w.Write([]byte(`{"message":"ok"}`))
+		return
 	case strings.HasPrefix(path, "/api/hosting/v1/accounts/"):
 		parts := strings.Split(strings.TrimPrefix(path, "/api/hosting/v1/accounts/"), "/")
 		user := parts[0]
 		switch {
+		case r.Method == http.MethodDelete && len(parts) == 3 && parts[1] == "databases":
+			s.mu.Lock()
+			var keep []map[string]any
+			for _, d := range s.Databases[user] {
+				if d["name"] != parts[2] {
+					keep = append(keep, d)
+				}
+			}
+			s.Databases[user] = keep
+			s.mu.Unlock()
+			w.Write([]byte(`{"message":"ok"}`))
+			return
 		case r.Method == http.MethodPost && len(parts) == 4 && parts[1] == "websites" && parts[3] == "parked-domains":
 			if fail("parked") {
 				return

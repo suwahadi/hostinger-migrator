@@ -23,7 +23,7 @@ var mainMenu = []menuEntry{
 	{"7", "Laporan", 7},
 }
 
-const implementedPhase = 4
+const implementedPhase = 7
 
 func (a *App) runWizard(ctx context.Context) error {
 	for {
@@ -68,6 +68,10 @@ func (a *App) runWizard(ctx context.Context) error {
 			}
 		case "6":
 			if err := a.wizardAction(a.showPending(ctx, false)); err != nil {
+				return err
+			}
+		case "7":
+			if err := a.wizardAction(a.runReport(ctx, "", map[string]bool{"html": true, "json": true, "csv": true})); err != nil {
 				return err
 			}
 		default:
