@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"hostinger-migrator/internal/backup"
+	"hostinger-migrator/internal/cutover"
 	"hostinger-migrator/internal/pipeline"
 	"hostinger-migrator/internal/secrets"
 	"hostinger-migrator/internal/verify"
@@ -38,13 +39,19 @@ func (a *App) runner() *pipeline.Runner {
 		Log:      a.log,
 		RetryMax: a.cfg.API.RetryMaks,
 		Parallel: a.cfg.Worker.WebsiteParalel,
-		Stages:   a.stages(),
 	}
+	cut := &cutover.Stage{FinalSync: a.cfg.Backup.FinalSyncSebelumCutover, SSLWait: time.Duration(a.cfg.SSL.BatasTungguMenit) * time.Minute}
+	d.Stages = []pipeline.Stage{cut}
 	if a.env.RunnerHook != nil {
 		a.env.RunnerHook(&d)
 	}
+	if a.env.StageHook != nil {
+		a.env.StageHook(cut)
+	}
 	d.OnBatchFinished = a.onBatchFinished
-	return pipeline.NewRunner(d)
+	r := pipeline.NewRunner(d)
+	cut.Runner = r
+	return r
 }
 
 func newWorkerCmds(app *App) []*cobra.Command {
@@ -362,10 +369,6 @@ func (a *App) autostart(mode string) error {
 		a.println("Autostart dimatikan.")
 	}
 	a.store.AppendAudit(context.Background(), nil, "operator", "autostart."+strings.ToLower(mode), worker.TaskName, "OK", "")
-	return nil
-}
-
-func (a *App) stages() []pipeline.Stage {
 	return nil
 }
 

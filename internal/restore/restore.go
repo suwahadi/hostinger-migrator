@@ -87,7 +87,14 @@ func (r *Restorer) uploadVerified(ctx context.Context, local, remote, sha string
 func (r *Restorer) Files(ctx context.Context, it *store.PipelineItem, m *backup.Manifest, destUnit string) (int64, error) {
 	work := r.WorkDir(it)
 	remote := path.Join(work, "files.tar.gz")
-	marker := path.Join(work, "extracted-"+m.Files.SHA256[:16])
+	if m.Final {
+		remote = path.Join(work, "files-final.tar.gz")
+	}
+	tag := "awal"
+	if m.Final {
+		tag = "final"
+	}
+	marker := path.Join(work, "extracted-"+tag+"-"+m.Files.SHA256[:16])
 	if out, _ := r.run(ctx, "test -f "+sshx.ShellQuote(marker)+" && cat "+sshx.ShellQuote(marker), nil); strings.TrimSpace(out) != "" {
 		n, _ := strconv.ParseInt(strings.TrimSpace(out), 10, 64)
 		return n, nil
@@ -95,7 +102,7 @@ func (r *Restorer) Files(ctx context.Context, it *store.PipelineItem, m *backup.
 	if err := r.uploadVerified(ctx, m.Files.Path, remote, m.Files.SHA256); err != nil {
 		return 0, err
 	}
-	stash := path.Join(work, "isi-bawaan-"+time.Now().UTC().Format("20060102150405"))
+	stash := path.Join(work, "isi-sebelum-"+tag+"-"+strconv.FormatInt(time.Now().UnixNano(), 10))
 	q := sshx.ShellQuote
 	cmd := "set -e; mkdir -p " + q(destUnit) + " " + q(stash) + "; " +
 		"find " + q(destUnit) + " -mindepth 1 -maxdepth 1 -exec mv -t " + q(stash) + " {} +; " +
@@ -353,6 +360,6 @@ func (r *Restorer) MatchPHP(ctx context.Context, sourceVersion, dummy string) (s
 }
 
 func (r *Restorer) Cleanup(ctx context.Context, it *store.PipelineItem) error {
-	_, err := r.run(ctx, "rm -f "+sshx.ShellQuote(path.Join(r.WorkDir(it), "files.tar.gz"))+" "+sshx.ShellQuote(path.Join(r.WorkDir(it), "db-"))+"*.sql.gz", nil)
+	_, err := r.run(ctx, "rm -f "+sshx.ShellQuote(path.Join(r.WorkDir(it), "files.tar.gz"))+" "+sshx.ShellQuote(path.Join(r.WorkDir(it), "files-final.tar.gz"))+" "+sshx.ShellQuote(path.Join(r.WorkDir(it), "db-"))+"*.sql.gz", nil)
 	return err
 }

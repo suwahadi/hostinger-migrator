@@ -403,3 +403,51 @@ func SearchReplaceCommand(unit, from, to string) string {
 	return "cd " + q(path.Join(unit, "public_html")) + " && wp search-replace " + q(from) + " " + q(to) + " --all-tables-with-prefix --skip-columns=guid --precise --quiet && wp search-replace " +
 		q(strings.Replace(from, "https://", "http://", 1)) + " " + q(to) + " --all-tables-with-prefix --skip-columns=guid --precise --quiet"
 }
+
+func (v *Verifier) FinalCheck(ctx context.Context, domain, ip string, sslActive bool, httpsScheme string, rep *Report) {
+	c := v.client(ip)
+	if httpsScheme == "" {
+		httpsScheme = "https"
+	}
+	check := func(name string, p *page) bool {
+		for _, sig := range errorSignatures {
+			if strings.Contains(p.body, sig) {
+				rep.add(name, Fail, "Halaman memuat tanda error: "+sig)
+				return false
+			}
+		}
+		return true
+	}
+	p, err := v.get(ctx, c, "http://"+domain+"/", domain)
+	switch {
+	case err != nil:
+		rep.add("HTTP", Fail, "http://"+domain+" tidak merespons: "+err.Error())
+	case p.status == 200:
+		if check("HTTP", p) {
+			if sslActive {
+				rep.add("HTTP", Warn, "http://"+domain+" HTTP 200 tanpa redirect ke HTTPS")
+			} else {
+				rep.add("HTTP", Pass, "http://"+domain+" HTTP 200")
+			}
+		}
+	case p.status >= 300 && p.status < 400 && strings.HasPrefix(strings.ToLower(p.location), "https://"):
+		rep.add("HTTP", Pass, fmt.Sprintf("http://%s redirect %d ke HTTPS", domain, p.status))
+	default:
+		rep.add("HTTP", Fail, fmt.Sprintf("http://%s HTTP %d", domain, p.status))
+	}
+	if !sslActive {
+		rep.add("HTTPS", Warn, "SSL belum aktif; HTTPS belum bisa diverifikasi")
+		return
+	}
+	p, err = v.get(ctx, c, httpsScheme+"://"+domain+"/", domain)
+	switch {
+	case err != nil:
+		rep.add("HTTPS", Fail, "https://"+domain+" gagal: "+err.Error())
+	case p.status == 200:
+		if check("HTTPS", p) {
+			rep.add("HTTPS", Pass, "https://"+domain+" HTTP 200")
+		}
+	default:
+		rep.add("HTTPS", Fail, fmt.Sprintf("https://%s HTTP %d", domain, p.status))
+	}
+}

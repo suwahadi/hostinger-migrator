@@ -625,3 +625,55 @@ func (s *Store) GetHostingAccount(ctx context.Context, alias, id string) (*Hosti
 	}
 	return nil, ErrNotFound
 }
+
+func (s *Store) RevokeApproval(ctx context.Context, batchID, kind, domain string) error {
+	return s.WithTx(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT id, item_list_json FROM approvals WHERE batch_id = ? AND kind = ?`, batchID, kind)
+		if err != nil {
+			return err
+		}
+		type row struct {
+			id    int64
+			items []string
+		}
+		var all []row
+		for rows.Next() {
+			var r row
+			var raw string
+			if err := rows.Scan(&r.id, &raw); err != nil {
+				rows.Close()
+				return err
+			}
+			json.Unmarshal([]byte(raw), &r.items)
+			all = append(all, r)
+		}
+		rows.Close()
+		for _, r := range all {
+			var keep []string
+			for _, d := range r.items {
+				if d != domain {
+					keep = append(keep, d)
+				}
+			}
+			b, _ := json.Marshal(keep)
+			if _, err := tx.ExecContext(ctx, `UPDATE approvals SET item_list_json = ? WHERE id = ?`, string(b), r.id); err != nil {
+				return err
+			}
+		}
+		return s.AppendAudit(ctx, tx, "operator", "approval.revoke."+kind, domain, "DICABUT", "batch "+batchID)
+	})
+}
+
+func (s *Store) DeleteManualTasks(ctx context.Context, itemID int64, codes ...string) error {
+	for _, c := range codes {
+		if _, err := s.db.ExecContext(ctx, `DELETE FROM manual_tasks WHERE item_id = ? AND code = ?`, itemID, c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) DeleteStep(ctx context.Context, itemID int64, name string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM steps WHERE item_id = ? AND name = ?`, itemID, name)
+	return err
+}

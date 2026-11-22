@@ -532,3 +532,9 @@ func (e *Env) Count(query string, args ...any) int {
 	e.Store.DB().QueryRow(query, args...).Scan(&n)
 	return n
 }
+
+func (e *Env) Count2(itemID int64) string {
+	var s string
+	e.Store.DB().QueryRow(`SELECT instructions FROM manual_tasks WHERE item_id = ? ORDER BY id DESC LIMIT 1`, itemID).Scan(&s)
+	return s
+}

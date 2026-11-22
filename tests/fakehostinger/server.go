@@ -38,6 +38,10 @@ type Server struct {
 	OnboardingPolls  int
 	Fail             map[string]int
 	ZoneWrites       []map[string]any
+	Snapshots        map[string][]map[string]any
+	SSL              map[string]string
+	SSLPolls         int
+	sslPolls         map[string]int
 	freeCounter      int
 	onboardings      map[string]string
 	pollCount        map[string]int
@@ -74,7 +78,8 @@ func (s *Server) WebsitesOf(token string) []hostinger.Website {
 
 func New(tls bool, validTokens ...string) *Server {
 	s := &Server{valid: map[string]bool{}, hits: map[string]int{}, WebsitesFor: map[string][]hostinger.Website{}, OrdersFor: map[string][]hostinger.Order{},
-		OrderUsers: map[int64]string{}, onboardings: map[string]string{}, pollCount: map[string]int{}, Fail: map[string]int{}}
+		OrderUsers: map[int64]string{}, onboardings: map[string]string{}, pollCount: map[string]int{}, Fail: map[string]int{},
+		Snapshots: map[string][]map[string]any{}, SSL: map[string]string{}, sslPolls: map[string]int{}}
 	for _, t := range validTokens {
 		s.valid[t] = true
 	}
@@ -233,11 +238,19 @@ func (s *Server) serveDynamic(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(zone)
 		return
 	case strings.HasPrefix(path, "/api/dns/v1/snapshots/"):
-		if _, ok := s.Zones[strings.TrimPrefix(path, "/api/dns/v1/snapshots/")]; !ok {
+		d := strings.TrimPrefix(path, "/api/dns/v1/snapshots/")
+		s.mu.Lock()
+		_, ok := s.Zones[d]
+		list := []map[string]any{{"id": 1, "reason": "awal", "created_at": "2026-11-01T00:00:00Z"}}
+		for _, sn := range s.Snapshots[d] {
+			list = append(list, map[string]any{"id": sn["id"], "reason": sn["reason"], "created_at": "2026-11-22T00:00:00Z"})
+		}
+		s.mu.Unlock()
+		if !ok {
 			notFound(w)
 			return
 		}
-		w.Write([]byte(`[{"id":1,"reason":"awal","created_at":"2026-11-01T00:00:00Z"}]`))
+		json.NewEncoder(w).Encode(list)
 		return
 	case path == "/api/domains/v1/portfolio":
 		json.NewEncoder(w).Encode(s.Portfolio)
@@ -267,6 +280,22 @@ func (s *Server) serveDynamic(w http.ResponseWriter, r *http.Request) {
 				json.NewEncoder(w).Encode(map[string]any{"php_version": v, "php_version_full": v + ".0"})
 				return
 			}
+		case len(parts) == 5 && parts[1] == "websites" && parts[3] == "ssl" && parts[4] == "status":
+			s.mu.Lock()
+			st := s.SSL[parts[2]]
+			if st == "installing" {
+				s.sslPolls[parts[2]]++
+				if s.sslPolls[parts[2]] >= s.SSLPolls {
+					st = "active"
+					s.SSL[parts[2]] = st
+				}
+			}
+			s.mu.Unlock()
+			if st == "" {
+				st = "not_installed"
+			}
+			json.NewEncoder(w).Encode(map[string]any{"status": st, "provider": nil, "is_lifetime": false, "is_https_redirect_enabled": false, "expires_at": nil, "last_error": nil})
+			return
 		case len(parts) == 4 && parts[1] == "domains" && parts[3] == "files":
 			if items, ok := s.Files[parts[2]]; ok {
 				json.NewEncoder(w).Encode(map[string]any{"path": "", "items": items, "total_items": len(items), "total_items_current_page": len(items), "offset": 0})
@@ -368,10 +397,92 @@ func (s *Server) serveWrite(w http.ResponseWriter, r *http.Request, token string
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(map[string]any{"domain": domain, "username": user, "status": status, "created_at": "x", "updated_at": "x"})
 		return
+	case strings.HasPrefix(path, "/api/dns/v1/zones/") && (r.Method == http.MethodPut || r.Method == http.MethodDelete):
+		if fail("dns") {
+			return
+		}
+		d := strings.TrimPrefix(path, "/api/dns/v1/zones/")
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		prev, _ := json.Marshal(s.Zones[d])
+		var prevCopy []map[string]any
+		json.Unmarshal(prev, &prevCopy)
+		s.Snapshots[d] = append(s.Snapshots[d], map[string]any{"id": len(s.Snapshots[d]) + 2, "reason": "perubahan " + r.Method, "zone": prevCopy})
+		zone := s.Zones[d]
+		if r.Method == http.MethodPut {
+			items, _ := body["zone"].([]any)
+			overwrite := true
+			if v, ok := body["overwrite"].(bool); ok {
+				overwrite = v
+			}
+			for _, raw := range items {
+				rr, _ := raw.(map[string]any)
+				if overwrite {
+					zone = removeRR(zone, rr["name"], rr["type"])
+				}
+				zone = append(zone, rr)
+			}
+		} else {
+			filters, _ := body["filters"].([]any)
+			for _, raw := range filters {
+				f, _ := raw.(map[string]any)
+				zone = removeRR(zone, f["name"], f["type"])
+			}
+		}
+		s.Zones[d] = zone
+		s.ZoneWrites = append(s.ZoneWrites, map[string]any{"domain": d, "method": r.Method, "body": body})
+		w.Write([]byte(`{"message":"ok"}`))
+		return
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/dns/v1/snapshots/") && strings.HasSuffix(path, "/restore"):
+		parts := strings.Split(strings.TrimPrefix(path, "/api/dns/v1/snapshots/"), "/")
+		id, _ := strconv.Atoi(parts[1])
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for _, sn := range s.Snapshots[parts[0]] {
+			if sn["id"] == id {
+				zone, _ := sn["zone"].([]map[string]any)
+				s.Zones[parts[0]] = zone
+				w.Write([]byte(`{"message":"ok"}`))
+				return
+			}
+		}
+		notFound(w)
+		return
 	case strings.HasPrefix(path, "/api/hosting/v1/accounts/"):
 		parts := strings.Split(strings.TrimPrefix(path, "/api/hosting/v1/accounts/"), "/")
 		user := parts[0]
 		switch {
+		case r.Method == http.MethodPost && len(parts) == 4 && parts[1] == "websites" && parts[3] == "parked-domains":
+			if fail("parked") {
+				return
+			}
+			pd, _ := body["parked_domain"].(string)
+			s.mu.Lock()
+			s.Parked[parts[2]] = append(s.Parked[parts[2]], map[string]any{"domain": pd, "parent_domain": parts[2], "type": "domain"})
+			s.mu.Unlock()
+			w.Write([]byte(`{"message":"ok"}`))
+			return
+		case r.Method == http.MethodDelete && len(parts) == 5 && parts[1] == "websites" && parts[3] == "parked-domains":
+			s.mu.Lock()
+			var keep []map[string]any
+			for _, p := range s.Parked[parts[2]] {
+				if p["domain"] != parts[4] {
+					keep = append(keep, p)
+				}
+			}
+			s.Parked[parts[2]] = keep
+			s.mu.Unlock()
+			w.Write([]byte(`{"message":"ok"}`))
+			return
+		case r.Method == http.MethodPost && len(parts) == 5 && parts[1] == "websites" && parts[3] == "ssl" && parts[4] == "setup":
+			if fail("ssl") {
+				return
+			}
+			s.mu.Lock()
+			s.SSL[parts[2]] = "installing"
+			s.mu.Unlock()
+			w.Write([]byte(`{"message":"ok"}`))
+			return
 		case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "databases":
 			if fail("db-create") {
 				return
@@ -407,4 +518,24 @@ func (s *Server) serveWrite(w http.ResponseWriter, r *http.Request, token string
 	}
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte(`{"message":"endpoint tulis tidak disimulasikan"}`))
+}
+
+func removeRR(zone []map[string]any, name, typ any) []map[string]any {
+	var out []map[string]any
+	for _, rr := range zone {
+		if rr["name"] == name && rr["type"] == typ {
+			continue
+		}
+		out = append(out, rr)
+	}
+	return out
+}
+
+func (s *Server) Zone(domain string) []map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b, _ := json.Marshal(s.Zones[domain])
+	var out []map[string]any
+	json.Unmarshal(b, &out)
+	return out
 }

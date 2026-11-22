@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"hostinger-migrator/internal/cli"
+	"hostinger-migrator/internal/cutover"
 	"hostinger-migrator/internal/pipeline"
 	"hostinger-migrator/tests/testenv"
 )
@@ -51,6 +52,9 @@ func (h *runHarness) run(stdin string, args ...string) int {
 			d.Sleep = td.Sleep
 			d.ProvisionPoll = td.ProvisionPoll
 			d.ProvisionTimeout = td.ProvisionTimeout
+		},
+		StageHook: func(s *cutover.Stage) {
+			s.HTTPSScheme = "http"
 		},
 	}
 	return cli.Execute(append([]string{"--config", h.config}, args...), env)
@@ -159,4 +163,51 @@ func TestPendingShowsDBPasswordOnlyWhenAsked(t *testing.T) {
 		t.Fatalf("setelah DB manual = %s/%s %s", it.State, it.SideState, it.LastError)
 	}
 	h.e.AssertNoSecretsOnDisk(pwLine)
+}
+
+func TestCutoverAndRollbackCommands(t *testing.T) {
+	h := newRunHarness(t)
+	h.e.Prepare("domainanda.com")
+	if code := h.run("", "start"); code != cli.ExitOK {
+		t.Fatalf("start: %s", h.stderr.String())
+	}
+	if code := h.run("batal\n", "cutover"); code != cli.ExitOK || !strings.Contains(h.stdout.String(), "Dibatalkan") {
+		t.Fatalf("cutover batal: %s", h.stdout.String())
+	}
+	if it := h.e.Item("domainanda.com"); it.State != pipeline.StateVerified {
+		t.Fatalf("tanpa CUTOVER tidak boleh jalan: %s", it.State)
+	}
+	code := h.run("CUTOVER\n", "cutover")
+	out := h.stdout.String()
+	if code != cli.ExitOK || !strings.Contains(out, "record A/AAAA diubah ke IP tujuan") || !strings.Contains(out, "Cutover disetujui untuk 1 website") {
+		t.Fatalf("cutover (%d): %s%s", code, out, h.stderr.String())
+	}
+	h.run("", "pending")
+	if !strings.Contains(h.stdout.String(), "MANUAL_SOURCE_RENAME") {
+		t.Fatalf("harus menunggu ganti domain sumber: %s", h.stdout.String())
+	}
+	h.e.API.Lock()
+	for i, w := range h.e.API.WebsitesFor[testenv.SrcToken] {
+		if w.Domain == "domainanda.com" {
+			h.e.API.WebsitesFor[testenv.SrcToken][i].Domain = "sementara.hostingersite.com"
+		}
+	}
+	h.e.API.Unlock()
+	if code := h.run("", "confirm", "MANUAL_SOURCE_RENAME", "domainanda.com", "--nilai", "sementara.hostingersite.com"); code != cli.ExitOK {
+		t.Fatalf("confirm: %s%s", h.stdout.String(), h.stderr.String())
+	}
+	if it := h.e.Item("domainanda.com"); it.State != pipeline.StateCleanupReady {
+		t.Fatalf("setelah cutover = %s/%s %s", it.State, it.SideState, it.LastError)
+	}
+	if code := h.run("tidak\n", "rollback", "domainanda.com"); code != cli.ExitOK || !strings.Contains(h.stdout.String(), "Dibatalkan") {
+		t.Fatalf("rollback batal: %s", h.stdout.String())
+	}
+	code = h.run("ROLLBACK\n", "rollback", "domainanda.com")
+	out = h.stdout.String()
+	if code != cli.ExitOK || !strings.Contains(out, "DNS dikembalikan") || !strings.Contains(out, "ganti domain kembali ke domainanda.com") {
+		t.Fatalf("rollback (%d): %s%s", code, out, h.stderr.String())
+	}
+	if it := h.e.Item("domainanda.com"); it.State != pipeline.StateVerified {
+		t.Fatalf("setelah rollback = %s", it.State)
+	}
 }

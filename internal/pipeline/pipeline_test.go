@@ -84,7 +84,7 @@ func TestFullMigrationToVerified(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(wp.DestRootPath, "public_html", "default.php")); !os.IsNotExist(err) {
 		t.Fatal("isi bawaan dummy harus dipindah ke .migrator")
 	}
-	stash, _ := filepath.Glob(filepath.Join(e.DstHome(), ".migrator", "*", "isi-bawaan-*", "public_html", "default.php"))
+	stash, _ := filepath.Glob(filepath.Join(e.DstHome(), ".migrator", "*", "isi-sebelum-awal-*", "public_html", "default.php"))
 	if len(stash) == 0 {
 		t.Fatal("isi bawaan dummy harus disimpan, bukan dihapus")
 	}

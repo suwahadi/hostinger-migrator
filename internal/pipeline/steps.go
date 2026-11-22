@@ -131,6 +131,15 @@ func (r *Runner) RunRestore(ctx context.Context, ic *ItemContext, final bool) er
 	if err := rs.AfterRestore(ctx, ic.Website, ic.Item.DestRootPath); err != nil {
 		return err
 	}
+	if ic.Website.SiteType == "Node.js" {
+		if _, ok := ic.ManualConfirmed(ctx, "MANUAL_NODEJS"); !ok {
+			return &ManualError{Code: "MANUAL_NODEJS", Instructions: fmt.Sprintf("File aplikasi Node.js sudah dipulihkan ke %s.\n"+
+				"1. hPanel akun %s → Websites → %s → Node.js: atur versi Node, entry file, dan perintah build/start seperti di website sumber.\n"+
+				"2. Salin environment variable dari hPanel sumber (file .env sudah ikut dipindah bila ada).\n"+
+				"3. Deploy/restart aplikasi lalu pastikan %s bisa dibuka.\n"+
+				"4. Jalankan: migrator confirm MANUAL_NODEJS %s", ic.Item.DestRootPath, ic.DestAcc.ID, ic.Item.DummyDomain, ic.Item.DummyDomain, ic.Item.SourceDomain)}
+		}
+	}
 	if _, ok := ic.ManualConfirmed(ctx, "MANUAL_PHP"); !ok {
 		if _, err := rs.MatchPHP(ctx, ic.Website.PHPVersion, ic.Item.DummyDomain); err != nil {
 			if errors.Is(err, restore.ErrManualPHP) {

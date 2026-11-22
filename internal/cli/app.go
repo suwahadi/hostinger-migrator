@@ -13,6 +13,7 @@ import (
 
 	"hostinger-migrator/internal/account"
 	"hostinger-migrator/internal/config"
+	"hostinger-migrator/internal/cutover"
 	"hostinger-migrator/internal/hostinger"
 	"hostinger-migrator/internal/logx"
 	"hostinger-migrator/internal/pipeline"
@@ -40,6 +41,7 @@ type Env struct {
 	LookupNS       func(ctx context.Context, domain string) ([]string, error)
 	SpawnWorker    func(ctx context.Context, a *App) error
 	RunnerHook     func(d *pipeline.Deps)
+	StageHook      func(s *cutover.Stage)
 }
 
 type App struct {
