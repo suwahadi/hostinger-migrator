@@ -101,10 +101,36 @@ Kedua kandidat API **wajib dibuktikan di Fase 4** pada akun uji (R3). Hal yang p
 
 ## 6. Pertanyaan untuk Operator
 
-Dikirim lewat wizard di chat. Jawaban dicatat di `docs/decisions.md`.
+Sudah dijawab lewat wizard pada 22 November 2026. Ringkasan jawaban ada di bagian 7, detailnya di `docs/decisions.md` (D-008 sampai D-011).
 
 1. **Restore email:** setuju memakai jalur *Mail API (backup .eml) → buat mailbox via API → IMAP APPEND*? Atau jalur yang pernah Anda pakai berbeda (sebutkan langkahnya)?
 2. **Password mailbox:** bisakah Anda menyediakan password lama tiap mailbox, atau boleh dibuatkan password baru?
 3. **Paket email:** domain-domain klien memakai *Free Business Email* bawaan hosting atau paket Hostinger Email berbayar?
 4. **Cutover:** setuju langkah lepas domain di sumber dijadikan checkpoint manual (`MANUAL_SOURCE_RENAME`), sementara pasang domain di tujuan dicoba via API dulu di Fase 4?
 5. **Kuota website tujuan:** karena tidak ada di API, boleh tool memakai tabel kuota paket standar Hostinger (Single/Premium/Business) dan meminta konfirmasi operator?
+
+## 7. Jawaban Operator dan Alur Email Final
+
+| Pertanyaan | Jawaban |
+|---|---|
+| Restore email | API + IMAP APPEND |
+| Password mailbox | Dibuatkan password baru oleh tool |
+| Paket email klien | Free Business Email |
+| Cutover dan kuota | Setuju semua |
+
+Alur email v1 (menggantikan PRD 8.12 langkah 2, 6, 7, 10):
+
+1. Inventaris mailbox, alias, forwarder, catch-all, auto-reply via `/api/mail/v1` (token hPanel).
+2. Konfirmasi operator (sekali per batch): ganti password sumber + hapus email lama.
+3. Ganti password mailbox sumber ke password baru buatan tool (`PATCH …/mailboxes/{id}/password`).
+4. Backup `IMAP FETCH` semua folder → `.eml` + `manifest.json` (jumlah pesan per folder, ukuran, sha256).
+5. Validasi jumlah pesan backup = jumlah di server.
+6. Hapus mailbox sumber (soft delete) dan layanan email domain (checkpoint manual).
+7. Aktifkan email domain di akun tujuan (`MANUAL_EMAIL_SETUP`), lalu buat mailbox via API dengan password yang sama.
+8. `IMAP APPEND` per folder, menjaga flag dan tanggal internal.
+9. Buat ulang alias, forwarder, catch-all, dan auto-reply via API.
+10. DNS email (MX, SPF, DKIM, DMARC) via token sumber.
+11. Verifikasi jumlah pesan per folder dan login IMAP berhasil.
+12. Operator melihat password baru lewat perintah khusus (ditampilkan sekali, tidak masuk laporan).
+
+Risiko baru: **R9** — ketersediaan `/api/mail/v1` untuk Free Business Email belum terbukti. Bila tidak tersedia, langkah 3, 6, 7, dan 9 menjadi checkpoint manual dan operator perlu memberikan password mailbox sumber.
