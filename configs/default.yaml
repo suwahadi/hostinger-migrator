@@ -18,3 +18,10 @@ ssl:
   batas_tunggu_menit: 60
 cleanup:
   wajib_ssl_aktif: true
+kuota_paket:
+  hostinger_single:
+    website: 1
+  hostinger_premium:
+    website: 100
+  hostinger_business:
+    website: 100

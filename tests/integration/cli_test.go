@@ -2,6 +2,8 @@ package integration
 
 import (
 	"bytes"
+	"context"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,6 +30,16 @@ type harness struct {
 	stderr  bytes.Buffer
 }
 
+func fakeNS(ctx context.Context, domain string) ([]string, error) {
+	switch domain {
+	case "domainanda.com":
+		return []string{"ns1.dns-parking.com", "ns2.dns-parking.com"}, nil
+	case "toko.id":
+		return []string{"ana.ns.cloudflare.com", "bob.ns.cloudflare.com"}, nil
+	}
+	return nil, &net.DNSError{Err: "no such host", Name: domain, IsNotFound: true}
+}
+
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	srv := fakehostinger.New(true, goodToken)
@@ -52,6 +64,7 @@ func (h *harness) run(stdin string, args ...string) int {
 		SecretsBackend: h.backend,
 		HTTPClient:     h.srv.Client(),
 		Redactor:       logx.NewRedactor(),
+		LookupNS:       fakeNS,
 	}
 	return cli.Execute(append([]string{"--config", h.config}, args...), env)
 }
@@ -154,7 +167,7 @@ func TestRemoveRequiresConfirmation(t *testing.T) {
 
 func TestWizardFlow(t *testing.T) {
 	h := newHarness(t)
-	input := strings.Join([]string{"9", "3", "1", "1", goodToken, "wizard", "2", "0", "0"}, "\n") + "\n"
+	input := strings.Join([]string{"9", "5", "1", "1", goodToken, "wizard", "2", "0", "0"}, "\n") + "\n"
 	code := h.run(input)
 	out := h.stdout.String()
 	if code != cli.ExitOK {

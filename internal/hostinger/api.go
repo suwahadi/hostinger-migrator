@@ -126,3 +126,163 @@ func BuildDiscovery(orders []Order, sites []Website) *Discovery {
 	}
 	return d
 }
+
+type Database struct {
+	Name        string `json:"name"`
+	User        string `json:"user"`
+	Domain      string `json:"domain"`
+	DiskUsageMB int64  `json:"disk_usage_mb"`
+	MaxSizeMB   int64  `json:"max_size_mb"`
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+}
+
+func (c *Client) ListDatabases(ctx context.Context, username string) ([]Database, error) {
+	return ListAll[Database](ctx, c, Request{Endpoint: "hosting.databases.list", PathParams: map[string]string{"username": username}}, 100)
+}
+
+type Subdomain struct {
+	Username      string `json:"username"`
+	Domain        string `json:"domain"`
+	ParentDomain  string `json:"parent_domain"`
+	RootDirectory string `json:"root_directory"`
+	Subdomain     string `json:"subdomain"`
+}
+
+func (c *Client) ListSubdomains(ctx context.Context, username, domain string) ([]Subdomain, error) {
+	var out []Subdomain
+	_, err := c.Do(ctx, Request{Endpoint: "hosting.subdomains.list", PathParams: map[string]string{"username": username, "domain": domain}}, &out)
+	return out, err
+}
+
+type ParkedDomain struct {
+	Domain        string `json:"domain"`
+	ParentDomain  string `json:"parent_domain"`
+	RootDirectory string `json:"root_directory"`
+	Type          string `json:"type"`
+}
+
+func (c *Client) ListParkedDomains(ctx context.Context, username, domain string) ([]ParkedDomain, error) {
+	var out []ParkedDomain
+	_, err := c.Do(ctx, Request{Endpoint: "hosting.parked_domains.list", PathParams: map[string]string{"username": username, "domain": domain}}, &out)
+	return out, err
+}
+
+type PortfolioDomain struct {
+	ID        int64  `json:"id"`
+	Domain    string `json:"domain"`
+	Type      string `json:"type"`
+	Status    string `json:"status"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+func (c *Client) ListPortfolio(ctx context.Context) ([]PortfolioDomain, error) {
+	var out []PortfolioDomain
+	_, err := c.Do(ctx, Request{Endpoint: "domains.portfolio.list"}, &out)
+	return out, err
+}
+
+type DNSRecord struct {
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	TTL     int    `json:"ttl"`
+	Records []struct {
+		Content string `json:"content"`
+	} `json:"records"`
+}
+
+func (c *Client) GetZone(ctx context.Context, domain string) ([]DNSRecord, error) {
+	var out []DNSRecord
+	_, err := c.Do(ctx, Request{Endpoint: "dns.zones.get", PathParams: map[string]string{"domain": domain}}, &out)
+	return out, err
+}
+
+type MailOrder struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	Seats  int    `json:"seats"`
+	Domain *struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"domain"`
+	Plan *struct {
+		Name  string `json:"name"`
+		Title string `json:"title"`
+	} `json:"plan"`
+}
+
+func (o MailOrder) DomainName() string {
+	if o.Domain == nil {
+		return ""
+	}
+	return o.Domain.Name
+}
+
+func (o MailOrder) PlanName() string {
+	if o.Plan == nil {
+		return ""
+	}
+	return o.Plan.Name
+}
+
+func (c *Client) ListMailOrders(ctx context.Context) ([]MailOrder, error) {
+	return ListAll[MailOrder](ctx, c, Request{Endpoint: "mail.orders.list"}, 100)
+}
+
+type Mailbox struct {
+	ID         string `json:"id"`
+	Address    string `json:"address"`
+	Status     string `json:"status"`
+	IsCatchall bool   `json:"is_catchall"`
+	Usage      struct {
+		StorageUsed   int64 `json:"storage_used"`
+		StorageQuota  int64 `json:"storage_quota"`
+		MessagesUsed  int64 `json:"messages_used"`
+		MessagesQuota int64 `json:"messages_quota"`
+	} `json:"usage"`
+}
+
+func (c *Client) ListMailboxes(ctx context.Context, orderID string) ([]Mailbox, error) {
+	return ListAll[Mailbox](ctx, c, Request{Endpoint: "mail.mailboxes.list", PathParams: map[string]string{"orderId": orderID}}, 100)
+}
+
+type CronJob struct {
+	UID      string `json:"uid"`
+	Username string `json:"username"`
+	Time     string `json:"time"`
+	Command  string `json:"command"`
+}
+
+func (c *Client) ListCronJobs(ctx context.Context, username string) ([]CronJob, error) {
+	var out []CronJob
+	_, err := c.Do(ctx, Request{Endpoint: "hosting.cron_jobs.list", PathParams: map[string]string{"username": username}}, &out)
+	return out, err
+}
+
+type PHPDetails struct {
+	Version     string `json:"php_version"`
+	VersionFull string `json:"php_version_full"`
+}
+
+func (c *Client) GetPHPDetails(ctx context.Context, username, domain string) (*PHPDetails, error) {
+	var out PHPDetails
+	_, err := c.Do(ctx, Request{Endpoint: "hosting.php.details", PathParams: map[string]string{"username": username, "domain": domain}}, &out)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type FileEntry struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Type string `json:"type"`
+}
+
+func (c *Client) ListFiles(ctx context.Context, username, domain string) ([]FileEntry, error) {
+	var out struct {
+		Items []FileEntry `json:"items"`
+	}
+	_, err := c.Do(ctx, Request{Endpoint: "hosting.files.list", PathParams: map[string]string{"username": username, "domain": domain}}, &out)
+	return out.Items, err
+}

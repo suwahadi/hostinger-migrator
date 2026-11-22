@@ -36,6 +36,7 @@ type Env struct {
 	HTTPClient     *http.Client
 	Redactor       *logx.Redactor
 	Now            func() time.Time
+	LookupNS       func(ctx context.Context, domain string) ([]string, error)
 }
 
 type App struct {
@@ -50,6 +51,7 @@ type App struct {
 	limiters   *hostinger.LimiterPool
 	prompt     *Prompter
 	redactor   *logx.Redactor
+	lookupNS   func(ctx context.Context, domain string) ([]string, error)
 }
 
 type exitError struct {
@@ -81,6 +83,7 @@ func newApp(env Env) *App {
 		env:      env,
 		redactor: env.Redactor,
 		prompt:   NewPrompter(env.Stdin, env.Stdout, env.Stderr, env.ReadSecret),
+		lookupNS: env.LookupNS,
 	}
 }
 

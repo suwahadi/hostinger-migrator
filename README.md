@@ -2,7 +2,7 @@
 
 Alat baris perintah (CLI) untuk memindahkan website beserta layanan terkait — file, database, DNS, SSL, dan email — dari satu akun Hostinger Shared Hosting ke akun Hostinger lain secara otomatis, aman, bisa dilanjutkan setelah gangguan, dan menghasilkan laporan lengkap dalam bahasa Indonesia.
 
-> **Status:** Fase 2 selesai — kelola API token, setup SSH key, dan audit kapabilitas sudah bisa dipakai. Fitur migrasi dikerjakan bertahap di fase berikutnya. Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md).
+> **Status:** Fase 3 selesai — kelola token, setup SSH, audit kapabilitas, inventaris, dan pembuatan rencana migrasi sudah bisa dipakai. Eksekusi migrasi menyusul di Fase 4. Fitur migrasi dikerjakan bertahap di fase berikutnya. Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md).
 
 ## Fitur Utama (rencana v1)
 
@@ -79,6 +79,32 @@ Langkah setup SSH per akun:
 Status audit: `SUPPORTED` = teruji nyata, `MANUAL` = ada jalur manual, `UNSUPPORTED` = tidak tersedia, `UNKNOWN` = belum terbukti (tidak pernah dianggap `SUPPORTED`).
 
 Setelah migrasi selesai, **hapus SSH key migrator** dari hPanel semua akun (SSH Access → Delete).
+
+## Yang Sudah Bisa Dipakai (Fase 3)
+
+```bash
+./migrator.exe inventory                   # inventaris semua token (dipindai bila belum ada)
+./migrator.exe inventory xyz --refresh     # pindai ulang token xyz
+./migrator.exe plan --dry-run              # wizard rencana + semua pemeriksaan, tanpa menyimpan
+./migrator.exe plan                        # wizard rencana, simpan batch setelah ketik YAKIN
+./migrator.exe plan --sumber xyz --web domainanda.com,toko.id --tujuan zyx --akun-tujuan u73839202 --dry-run
+```
+
+Inventaris menampilkan per website: folder backup (root path), tipe (WordPress, Laravel, CodeIgniter, Joomla, Node.js, PHP native, Statis, Lainnya), ukuran, database, mailbox, versi PHP, serta tanda `[EXPIRED]`, `[DISABLED]`, `[NS EKSTERNAL]`. Hasil juga disimpan ke `data/inventory/<alias>-<akun>.json`. Inventaris tidak pernah mengubah apa pun.
+
+Pemeriksaan rencana: token aktif, inventaris tersedia, bentrok domain di tujuan (item `BLOCKED`, tidak ditimpa), kuota website, sisa disk (ukuran × 1,3), kuota database, SSH sumber dan tujuan. Website dengan domain expired/disabled tetap ikut dan berakhir `DUMMY_ONLY`.
+
+Kuota website per paket diatur di `config.yaml`:
+
+```yaml
+kuota_paket:
+  hostinger_single:
+    website: 1
+  hostinger_premium:
+    website: 100
+  hostinger_business:
+    website: 100
+```
 
 Saat pertama kali dijalankan, `config.yaml` dan folder `data/` (database, log) dibuat di folder kerja.
 

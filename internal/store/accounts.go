@@ -252,3 +252,9 @@ func nullInt(v int64) any {
 	}
 	return v
 }
+
+func (s *Store) WithTxUpdateCredential(ctx context.Context, alias, status, lastError string) error {
+	return s.WithTx(ctx, func(tx *sql.Tx) error {
+		return s.UpdateCredentialStatus(ctx, tx, alias, status, lastError)
+	})
+}

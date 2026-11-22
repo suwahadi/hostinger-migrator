@@ -40,7 +40,10 @@ type Options struct {
 	Sleep       func(context.Context, time.Duration) error
 	Now         func() time.Time
 	Jitter      func() float64
+	ReadOnly    bool
 }
+
+var ErrReadOnly = errors.New("client mode read-only menolak operasi tulis")
 
 type Client struct {
 	token       string
@@ -56,6 +59,7 @@ type Client struct {
 	sleep       func(context.Context, time.Duration) error
 	now         func() time.Time
 	jitter      func() float64
+	readOnly    bool
 }
 
 type Request struct {
@@ -99,6 +103,7 @@ func NewClient(opts Options) (*Client, error) {
 		sleep:       opts.Sleep,
 		now:         opts.Now,
 		jitter:      opts.Jitter,
+		readOnly:    opts.ReadOnly,
 	}
 	if c.auth == "" {
 		c.auth = AuthHPanel
@@ -140,6 +145,16 @@ func NewClient(opts Options) (*Client, error) {
 	return c, nil
 }
 
+func (c *Client) ReadOnlyCopy() *Client {
+	cp := *c
+	cp.readOnly = true
+	return &cp
+}
+
+func (c *Client) IsReadOnly() bool {
+	return c.readOnly
+}
+
 func (c *Client) endpointURL(ep Endpoint, req Request) (string, error) {
 	base := ep.BaseURL
 	switch base {
@@ -169,6 +184,9 @@ func (c *Client) Do(ctx context.Context, req Request, out any) (*Response, error
 	ep, err := c.registry.Lookup(req.Endpoint)
 	if err != nil {
 		return nil, err
+	}
+	if c.readOnly && ep.Method != http.MethodGet {
+		return nil, fmt.Errorf("%w: %s %s", ErrReadOnly, ep.Method, ep.ID)
 	}
 	if ep.Auth != c.auth {
 		return nil, fmt.Errorf("endpoint %s membutuhkan token %s, bukan %s", ep.ID, ep.Auth, c.auth)

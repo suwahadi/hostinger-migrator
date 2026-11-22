@@ -22,6 +22,12 @@ type Config struct {
 	Verifikasi VerifikasiConfig `yaml:"verifikasi"`
 	SSL        SSLConfig        `yaml:"ssl"`
 	Cleanup    CleanupConfig    `yaml:"cleanup"`
+	KuotaPaket map[string]Kuota `yaml:"kuota_paket"`
+}
+
+type Kuota struct {
+	Website  int `yaml:"website"`
+	Database int `yaml:"database"`
 }
 
 type StorageConfig struct {
@@ -136,6 +142,11 @@ func (c *Config) Validate() error {
 	}
 	if c.SSL.BatasTungguMenit < 1 {
 		problems = append(problems, "ssl.batas_tunggu_menit minimal 1")
+	}
+	for name, k := range c.KuotaPaket {
+		if k.Website < 0 || k.Database < 0 {
+			problems = append(problems, "kuota_paket."+name+" tidak boleh negatif")
+		}
 	}
 	if len(problems) > 0 {
 		return errors.New(strings.Join(problems, "; "))

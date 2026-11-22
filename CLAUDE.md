@@ -61,6 +61,7 @@ Dokumen acuan utama: [`docs/PRD.md`](docs/PRD.md). Baca bagian 19 PRD dan file i
 | Fase 0 — Riset kontrak API | Selesai (`docs/api-shared-hosting.md`, `contracts/*.yaml`) |
 | Fase 1 — Fondasi | Selesai di sisi kode dan test, exe di `dist/migrator.exe`; uji `migrator.exe` di Git Bash Windows dan token uji nyata menunggu operator |
 | Fase 2 — SSH & Capability Audit | Selesai di sisi kode dan test, exe di `dist/migrator.exe`; uji di akun Hostinger nyata (Single + Premium/Business) menunggu operator |
-| Fase 3–8 | Belum dimulai, menunggu persetujuan operator |
+| Fase 3 — Inventory, Detector, Planner | Selesai di sisi kode dan test, exe di `dist/migrator.exe`; uji inventaris di akun nyata menunggu operator |
+| Fase 4–8 | Belum dimulai, menunggu persetujuan operator |
 
 Keputusan email dan cutover: lihat `docs/decisions.md` D-008 sampai D-011 (password mailbox dibuat baru, restore via IMAP APPEND, Free Business Email).

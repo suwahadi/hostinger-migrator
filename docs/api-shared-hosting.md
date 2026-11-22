@@ -134,3 +134,8 @@ Alur email v1 (menggantikan PRD 8.12 langkah 2, 6, 7, 10):
 12. Operator melihat password baru lewat perintah khusus (ditampilkan sekali, tidak masuk laporan).
 
 Risiko baru: **R9** — ketersediaan `/api/mail/v1` untuk Free Business Email belum terbukti. Bila tidak tersedia, langkah 3, 6, 7, dan 9 menjadi checkpoint manual dan operator perlu memberikan password mailbox sumber.
+
+## 8. Pembaruan Fase 3
+
+- Contoh skema `Mail.V1.Orders.OrderPlanResource` di openapi.json 3.4.2 memakai plan `hostinger_free` ("Free Email"), sehingga Free Business Email kemungkinan besar muncul di `GET /api/mail/v1/orders`. Risiko R9 turun, tetap dibuktikan di akun uji (D-030).
+- Endpoint baca tambahan yang dipakai inventaris (semuanya sudah ada di kontrak): `hosting.subdomains.list`, `hosting.parked_domains.list`, `hosting.php.details`, `hosting.cron_jobs.list`, `hosting.files.list`, `domains.portfolio.list`, `dns.zones.get`, `mail.orders.list`, `mail.mailboxes.list`.

@@ -17,13 +17,13 @@ var mainMenu = []menuEntry{
 	{"1", "Kelola API token", 1},
 	{"2", "Siapkan SSH key", 2},
 	{"3", "Scan akun (inventaris)", 3},
-	{"4", "Buat rencana & mulai migrasi", 4},
+	{"4", "Buat rencana & mulai migrasi", 3},
 	{"5", "Status migrasi", 4},
 	{"6", "Tindakan manual tertunda", 4},
 	{"7", "Laporan", 7},
 }
 
-const implementedPhase = 2
+const implementedPhase = 3
 
 func (a *App) runWizard(ctx context.Context) error {
 	for {
@@ -52,6 +52,14 @@ func (a *App) runWizard(ctx context.Context) error {
 			}
 		case "2":
 			if err := a.sshMenu(ctx); err != nil {
+				return err
+			}
+		case "3":
+			if err := a.wizardAction(a.runInventory(ctx, "", a.askRefresh())); err != nil {
+				return err
+			}
+		case "4":
+			if err := a.wizardAction(a.runPlan(ctx, planOptions{})); err != nil {
 				return err
 			}
 		default:
@@ -229,4 +237,23 @@ func (a *App) pickAccount(ctx context.Context) (string, error) {
 		a.println("Akun tidak ditemukan.")
 	}
 	return "", nil
+}
+
+func (a *App) askRefresh() bool {
+	v, err := a.prompt.Line("Pindai ulang dari server? (y/T): ")
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(v), "y")
+}
+
+func (a *App) wizardAction(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, ErrInputClosed) {
+		return err
+	}
+	fmt.Fprintln(a.env.Stderr, "ERROR: "+a.redactor.String(err.Error()))
+	return nil
 }

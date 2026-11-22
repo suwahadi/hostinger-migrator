@@ -122,7 +122,7 @@ func newRootCmd(app *App) *cobra.Command {
 		},
 	})
 	root.PersistentFlags().BoolP("help", "h", false, "tampilkan bantuan")
-	root.AddCommand(newAccountCmd(app), newSSHCmd(app), newAuditCmd(app), newVersionCmd(app))
+	root.AddCommand(newAccountCmd(app), newSSHCmd(app), newAuditCmd(app), newInventoryCmd(app), newPlanCmd(app), newVersionCmd(app))
 	return root
 }
 

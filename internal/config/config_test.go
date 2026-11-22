@@ -95,3 +95,23 @@ func TestCloudSyncWarning(t *testing.T) {
 		t.Fatal("folder biasa tidak boleh diperingatkan")
 	}
 }
+
+func TestKuotaPaketDefaultAndOverride(t *testing.T) {
+	c, _ := Default()
+	if c.KuotaPaket["hostinger_single"].Website != 1 || c.KuotaPaket["hostinger_premium"].Website != 100 || c.KuotaPaket["hostinger_business"].Website != 100 {
+		t.Fatalf("kuota bawaan = %+v", c.KuotaPaket)
+	}
+	p := filepath.Join(t.TempDir(), "config.yaml")
+	os.WriteFile(p, []byte("kuota_paket:\n  hostinger_premium:\n    website: 3\n  hostinger_cloud:\n    website: 300\n"), 0o600)
+	c, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.KuotaPaket["hostinger_premium"].Website != 3 || c.KuotaPaket["hostinger_cloud"].Website != 300 || c.KuotaPaket["hostinger_business"].Website != 100 {
+		t.Fatalf("override kuota = %+v", c.KuotaPaket)
+	}
+	os.WriteFile(p, []byte("kuota_paket:\n  x:\n    website: -1\n"), 0o600)
+	if _, err := Load(p); err == nil {
+		t.Fatal("kuota negatif harus ditolak")
+	}
+}
