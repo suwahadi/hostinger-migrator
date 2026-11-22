@@ -3,6 +3,7 @@ package testenv
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -596,4 +597,40 @@ func (e *Env) ActivateDestMail() {
 	e.API.Lock()
 	defer e.API.Unlock()
 	e.API.MailOrdersFor[DstToken] = []map[string]any{{"id": "mo-dst", "status": "active", "domain": map[string]any{"id": "d2", "name": "domainanda.com"}, "plan": map[string]any{"name": "hostinger_free"}}}
+}
+
+func (e *Env) AddSites(n int) []string {
+	e.T.Helper()
+	var domains []string
+	e.API.Lock()
+	defer e.API.Unlock()
+	for i := 1; i <= n; i++ {
+		d := fmt.Sprintf("web%02d.com", i)
+		domains = append(domains, d)
+		unit := e.SrcUnit(d)
+		withDB := i%3 == 0
+		if withDB {
+			db := fmt.Sprintf("u494983133_db%02d", i)
+			pw := fmt.Sprintf("FAKE-skala-%02d-Sandi", i)
+			write(e.T, filepath.Join(unit, "public_html", "index.php"), fmt.Sprintf(`<html><head><title>Web %02d</title><link href="/a.css" rel="stylesheet"><script src="/b.js"></script></head><body><img src="/c.png"></body></html>`, i))
+			write(e.T, filepath.Join(unit, "public_html", "config.php"), "<?php")
+			write(e.T, filepath.Join(unit, "public_html", "wp-config.php"), fmt.Sprintf("<?php\ndefine( 'DB_NAME', '%s' );\ndefine( 'DB_USER', '%s' );\ndefine( 'DB_PASSWORD', '%s' );\ndefine( 'DB_HOST', 'localhost' );\n", db, db, pw))
+			os.MkdirAll(filepath.Join(unit, "public_html", "wp-content"), 0o755)
+			os.MkdirAll(filepath.Join(unit, "public_html", "wp-includes"), 0o755)
+			write(e.T, filepath.Join(unit, "public_html", "wp-content", "index.php"), "<?php")
+			write(e.T, filepath.Join(unit, "public_html", "wp-includes", "index.php"), "<?php")
+			write(e.T, filepath.Join(e.FakeDB, db+".sql"), fmt.Sprintf("CREATE TABLE `t` (\n  `id` int\n);\nINSERT INTO `t` VALUES (%d),(%d);\n", i, i+100))
+			write(e.T, filepath.Join(e.FakeDB, db+".pwd"), pw)
+			e.API.Databases[SrcAccount] = append(e.API.Databases[SrcAccount], map[string]any{"name": db, "user": db, "domain": d})
+		} else {
+			write(e.T, filepath.Join(unit, "public_html", "index.html"), fmt.Sprintf(`<html><head><title>Web %02d</title><link href="/a.css" rel="stylesheet"><script src="/b.js"></script></head><body><img src="/c.png"></body></html>`, i))
+		}
+		for _, f := range []string{"a.css", "b.js", "c.png"} {
+			write(e.T, filepath.Join(unit, "public_html", f), f)
+		}
+		e.API.WebsitesFor[SrcToken] = append(e.API.WebsitesFor[SrcToken], hostinger.Website{Domain: d, Username: SrcAccount, OrderID: 101, VhostType: "addon", IsEnabled: true, RootDirectory: filepath.Join(unit, "public_html")})
+		e.API.Portfolio = append(e.API.Portfolio, hostinger.PortfolioDomain{ID: int64(100 + i), Domain: d, Status: "active"})
+		e.API.PHP[d] = "8.2"
+	}
+	return domains
 }

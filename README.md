@@ -2,101 +2,152 @@
 
 Alat baris perintah (CLI) untuk memindahkan website beserta layanan terkait — file, database, DNS, SSL, dan email — dari satu akun Hostinger Shared Hosting ke akun Hostinger lain secara otomatis, aman, bisa dilanjutkan setelah gangguan, dan menghasilkan laporan lengkap dalam bahasa Indonesia.
 
-> **Status:** Fase 3 selesai — kelola token, setup SSH, audit kapabilitas, inventaris, dan pembuatan rencana migrasi sudah bisa dipakai. Eksekusi migrasi menyusul di Fase 4. Fitur migrasi dikerjakan bertahap di fase berikutnya. Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md).
+> **Status: v1.0.0-rc1.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
 
-## Fitur Utama (rencana v1)
+---
 
-- Mendaftarkan banyak API token Hostinger dengan alias, disimpan aman di Windows Credential Manager.
-- Menemukan semua akun hosting (`uXXXXXXXX`) di balik setiap token.
-- Inventaris website, root path, database, domain, DNS, email, dan cron.
-- Deteksi otomatis tipe website: WordPress, Laravel, CodeIgniter, Joomla, PHP native, statis, Node.js.
-- Backup lokal via SSH (streaming, tanpa file sementara di server) dengan validasi checksum dan jumlah baris tabel.
-- Restore ke domain dummy (`*.hostingersite.com`) di akun tujuan, verifikasi otomatis, lalu cutover domain.
-- Snapshot DNS dan rollback sebelum cleanup.
-- Migrasi email (backup → hapus lama → buat baru → restore) dengan password lama tetap berlaku.
-- Website dengan domain expired/disabled tetap dipindah ke domain dummy (`DUMMY_ONLY`).
-- Berjalan di background, auto-resume setelah internet putus, aplikasi ditutup, atau Windows restart.
-- Laporan akhir: terminal, HTML, JSON, CSV.
+## 1. Unduh
 
-## Kebutuhan Sistem
-
-- Windows 10 atau 11.
-- Git for Windows (Git Bash). Tidak perlu Python, Node.js, Docker, WSL, OpenSSH, atau MySQL client.
-- Akun Hostinger Shared Hosting (Single, Premium, Business) dengan API token.
-- Akses SSH di hPanel (paket tanpa SSH memakai jalur manual).
-
-## Unduh
-
-Binary siap pakai untuk Windows x64 ada di [`dist/migrator.exe`](dist/migrator.exe). Checksum SHA-256 ada di [`dist/SHA256SUMS`](dist/SHA256SUMS). Cek di Git Bash dengan:
+Binary Windows x64 siap pakai: [`dist/migrator.exe`](dist/migrator.exe). Checksum di [`dist/SHA256SUMS`](dist/SHA256SUMS).
 
 ```bash
 cd dist && sha256sum -c SHA256SUMS
 ```
 
-## Build
+Hasil harus `migrator.exe: OK`.
 
-Butuh Go 1.26 atau lebih baru (hanya untuk build, tidak perlu di komputer operator).
+## 2. Persiapan
 
-```bash
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=0.1.0" -o migrator.exe ./cmd/migrator
-```
+1. Windows 10/11 dengan **Git for Windows** (Git Bash). Tidak perlu Python, Node.js, Docker, WSL, OpenSSH, atau MySQL client.
+2. Buat folder kerja **di luar OneDrive/Google Drive/Dropbox** (backup tidak dienkripsi), mis. `C:\migrasi`. Salin `migrator.exe` ke sana.
+3. Siapkan **API token** hPanel untuk akun sumber dan tujuan (hPanel → Profil → API).
+4. Pastikan **SSH aktif** di hPanel → Advanced → SSH Access untuk setiap akun hosting (paket tanpa SSH tetap bisa, lewat jalur backup manual).
 
-Uji:
-
-```bash
-go vet ./...
-go test ./...
-```
-
-## Yang Sudah Bisa Dipakai (Fase 1)
+Jalankan dari Git Bash di folder kerja:
 
 ```bash
-./migrator.exe account add                 # tambah token (input tersembunyi), validasi, temukan akun hosting
-./migrator.exe account list                # daftar token + akun hosting uXXXXXXXX
-./migrator.exe account test xyz            # uji ulang token
-./migrator.exe account remove xyz          # hapus token dari komputer ini saja
-./migrator.exe version
+cd /c/migrasi
+./migrator.exe            # wizard menu utama
+./migrator.exe --help     # daftar perintah
 ```
 
-## Yang Sudah Bisa Dipakai (Fase 2)
+Bila token terlihat saat diketik, jalankan lewat `winpty ./migrator.exe`.
 
-```bash
-./migrator.exe ssh setup                   # buat SSH key, pandu tempel di hPanel, tes koneksi semua akun
-./migrator.exe ssh setup u494983133        # atur ulang satu akun
-./migrator.exe ssh test                    # uji ulang SSH + SFTP semua akun
-./migrator.exe ssh remove-password u494983133   # hapus password SSH cadangan
-./migrator.exe audit                       # audit kapabilitas API + SSH (read-only) semua token
-./migrator.exe audit xyz                   # audit satu token
+Saat pertama kali dijalankan, tool membuat `config.yaml` dan folder `data/` (database SQLite, log, SSH key, backup, laporan).
+
+## 3. Alur Migrasi Langkah demi Langkah
+
+| # | Langkah | Perintah | Catatan |
+|---|---|---|---|
+| 1 | Daftarkan token sumber dan tujuan | `migrator account add` | Token disimpan di Windows Credential Manager, akun `uXXXXXXXX` ditemukan otomatis |
+| 2 | Siapkan SSH | `migrator ssh setup` | Tempel public key yang ditampilkan di hPanel tiap akun, isi IP/port/username |
+| 3 | Audit kapabilitas | `migrator audit` | Read-only. `SUPPORTED` hanya untuk yang teruji nyata |
+| 4 | Inventaris | `migrator inventory` | Root path, tipe, ukuran, database, mailbox, status domain |
+| 5 | Rencana (uji dulu) | `migrator plan --dry-run` | Semua pemeriksaan + urutan langkah, tanpa mengubah apa pun |
+| 6 | Rencana (simpan) | `migrator plan` | Ketik `LANJUT` (bila ada peringatan) lalu `YAKIN`; worker langsung berjalan di background |
+| 7 | Pantau | `migrator status` · `migrator pending` | Kerjakan tindakan manual lalu `migrator confirm <KODE> <domain>` |
+| 8 | Cutover domain | `migrator cutover` | Ketik `CUTOVER`; Anda akan diminta mengganti domain sumber ke domain sementara di hPanel |
+| 9 | Pindah email | `migrator email` | Ketik `HAPUS EMAIL`; password mailbox baru: `migrator email passwords` |
+| 10 | Bersihkan sumber | `migrator cleanup` | Hanya item yang lolos semua gerbang; ketik `HAPUS` |
+| 11 | Laporan | `migrator report` | `data/reports/<batch>/laporan.html`, `.json`, `.csv` |
+| 12 | Penutup | — | Hapus SSH key `hostinger-migrator` di hPanel semua akun, `migrator ssh remove-password <akun>`, `migrator autostart off` |
+
+### Apa yang terjadi otomatis per website
+
+1. **Backup** via SSH (streaming, tanpa file sementara di server): `tar` seluruh folder `/home/<u>/domains/<domain>/` + `mysqldump` per database. Divalidasi SHA-256, gzip, jumlah file, dan **jumlah baris per tabel**.
+2. **Provisioning**: website dummy dibuat di akun tujuan dengan subdomain gratis (`*.hostingersite.com`).
+3. **Restore**: upload + ekstrak (struktur identik, termasuk file tersembunyi), buat database, import, cocokkan jumlah baris, perbarui kredensial di `wp-config.php`/`.env` (salinan asli `.migrator-orig`), samakan versi PHP.
+4. **Verifikasi**: HTTP, tanda error, judul halaman, ≥3 asset, query database, `error_log` baru.
+5. Website dengan domain **expired/disabled** tetap dipindah dan berakhir **`DUMMY_ONLY`** (URL dummy tercantum di laporan).
+6. Setelah `cutover`: backup final, snapshot DNS, domain dipasang di tujuan, A/AAAA diubah ke IP tujuan (MX/TXT/CNAME pihak ketiga dipertahankan), SSL, verifikasi akhir.
+
+## 4. Tindakan Manual (`migrator pending`)
+
+| Kode | Kapan muncul | Yang dikerjakan operator |
+|---|---|---|
+| `MANUAL_BACKUP` | SSH sumber tidak tersedia | Unduh backup file + DB dari hPanel ke folder yang ditunjukkan |
+| `MANUAL_CREATE_SITE` | API menolak membuat website dummy | Buat website kosong di hPanel tujuan, `confirm ... --nilai <domain-sementara>` |
+| `MANUAL_CREATE_DB` | API menolak membuat database | Buat DB dengan nama/user yang ditampilkan; password: `migrator pending --tampilkan-rahasia` |
+| `MANUAL_PHP` | Versi PHP tidak bisa disamakan lewat API | Ubah versi PHP website dummy di hPanel |
+| `MANUAL_NODEJS` | Website Node.js | Atur aplikasi Node.js (versi, entry, build) di hPanel tujuan |
+| `MANUAL_SOURCE_RENAME` | Saat cutover | Ganti domain website sumber ke domain sementara, `confirm ... --nilai <domain-sementara>` |
+| `MANUAL_DEST_DOMAIN` | API menolak memasang domain di tujuan | Tambahkan domain sebagai parked/alias di website dummy |
+| `MANUAL_DNS` | Nameserver eksternal / zone di luar token | Ubah A/AAAA di penyedia DNS sesuai instruksi |
+| `MANUAL_EMAIL_PASSWORD` | API menolak mengganti password mailbox | Ganti password manual dengan password dari `migrator email passwords` |
+| `MANUAL_EMAIL_SOURCE_REMOVE` | Setelah mailbox sumber dihapus | Lepaskan layanan email domain di akun sumber |
+| `MANUAL_EMAIL_SETUP` | Sebelum mailbox dibuat ulang | Aktifkan email domain di akun tujuan (jangan buat mailbox) |
+| `MANUAL_EMAIL_CREATE` | API menolak membuat mailbox | Buat mailbox di hPanel tujuan dengan password baru |
+| `MANUAL_EMAIL_DNS` | Setelah restore email | Samakan MX/SPF/DKIM/DMARC dengan nilai di hPanel tujuan |
+| `MANUAL_CLEANUP` | API menolak menghapus website sumber | Hapus website + DB sumber di hPanel (jangan hapus domain) |
+
+## 5. Status Website
+
+`PLANNED → BACKUP_RUNNING → BACKUP_DONE → DEST_PROVISIONING → DEST_READY → RESTORE_RUNNING → RESTORE_DONE → VERIFYING → VERIFIED → (DUMMY_ONLY) | CUTOVER_RUNNING → CUTOVER_DONE → SSL_ACTIVE/SSL_PENDING → EMAIL_RUNNING → EMAIL_DONE/NO_EMAIL → CLEANUP_READY → CLEANED → COMPLETED`
+
+Status samping: `WAITING_MANUAL` (lihat `pending`), `BLOCKED` (butuh keputusan operator, mis. token dicabut, fingerprint SSH berubah, domain bentrok), `FAILED` (percobaan habis, ulangi dengan `migrator retry`).
+
+## 6. Gangguan dan Pemulihan
+
+| Kejadian | Yang dilakukan tool | Yang dilakukan operator |
+|---|---|---|
+| Internet putus | Retry dengan backoff; artefak yang terputus diulang dari awal | Tidak ada; bila `FAILED`: `migrator retry --failed` |
+| Git Bash ditutup | Worker tetap berjalan di background | — |
+| Windows restart | Langkah terputus diperiksa ulang | `migrator resume`, atau aktifkan `migrator autostart on` |
+| Token dicabut | Item `BLOCKED` | Token baru: `account remove` + `account add`, lalu `migrator retry --failed --termasuk-blocked` |
+| Fingerprint SSH berubah | Item `BLOCKED` | Periksa di hPanel, `migrator ssh setup <akun> --terima-host-baru` |
+| Ingin menghentikan | — | `migrator stop` (langkah besar diulang saat `start`/`resume`) |
+| Cutover bermasalah | — | `migrator rollback <domain>` (sebelum email dipindah dan sebelum cleanup) |
+
+## 7. Daftar Perintah
+
+```
+migrator                                  wizard menu utama
+migrator account add|list|test|remove     kelola API token
+migrator ssh setup|test [akun]            siapkan/uji SSH
+migrator ssh remove-password <akun>       hapus password SSH cadangan
+migrator audit [alias]                    audit kapabilitas (read-only)
+migrator inventory [alias] [--refresh]    inventaris (read-only)
+migrator plan [--dry-run]                 buat rencana batch
+migrator start | stop | status | resume   kendali worker background
+migrator status --item <domain>           detail satu website
+migrator retry --failed | --item <domain> [--termasuk-blocked]
+migrator pending [--tampilkan-rahasia]    tindakan manual tertunda
+migrator confirm <KODE> <domain> [--nilai x]
+migrator cutover [--batch] [--item]       setujui cutover (CUTOVER)
+migrator rollback <domain>                batalkan cutover (ROLLBACK)
+migrator email [--batch]                  setujui pemindahan email (HAPUS EMAIL)
+migrator email passwords [--domain]       tampilkan password mailbox baru
+migrator cleanup [--termasuk-dummy] [--kecualikan-ssl d1,d2]
+migrator report [--batch] [--html|--json|--csv]
+migrator autostart on|off                 Windows Task Scheduler
+migrator version
 ```
 
-Langkah setup SSH per akun:
+Kode keluar: `0` sukses, `1` error, `2` butuh tindakan operator.
 
-1. hPanel → Advanced → SSH Access → pastikan SSH **Enabled**.
-2. Klik **Add SSH Key**, tempel baris `ssh-ed25519 ... hostinger-migrator` yang ditampilkan tool (sama untuk semua akun).
-3. Ketik `SELESAI`, lalu masukkan IP, port, dan username dari halaman SSH Access (port **tidak** selalu 22).
-4. Bila paket tidak mendukung key, ketik `PASSWORD` untuk memakai password SSH (disimpan di Credential Manager).
-
-Status audit: `SUPPORTED` = teruji nyata, `MANUAL` = ada jalur manual, `UNSUPPORTED` = tidak tersedia, `UNKNOWN` = belum terbukti (tidak pernah dianggap `SUPPORTED`).
-
-Setelah migrasi selesai, **hapus SSH key migrator** dari hPanel semua akun (SSH Access → Delete).
-
-## Yang Sudah Bisa Dipakai (Fase 3)
-
-```bash
-./migrator.exe inventory                   # inventaris semua token (dipindai bila belum ada)
-./migrator.exe inventory xyz --refresh     # pindai ulang token xyz
-./migrator.exe plan --dry-run              # wizard rencana + semua pemeriksaan, tanpa menyimpan
-./migrator.exe plan                        # wizard rencana, simpan batch setelah ketik YAKIN
-./migrator.exe plan --sumber xyz --web domainanda.com,toko.id --tujuan zyx --akun-tujuan u73839202 --dry-run
-```
-
-Inventaris menampilkan per website: folder backup (root path), tipe (WordPress, Laravel, CodeIgniter, Joomla, Node.js, PHP native, Statis, Lainnya), ukuran, database, mailbox, versi PHP, serta tanda `[EXPIRED]`, `[DISABLED]`, `[NS EKSTERNAL]`. Hasil juga disimpan ke `data/inventory/<alias>-<akun>.json`. Inventaris tidak pernah mengubah apa pun.
-
-Pemeriksaan rencana: token aktif, inventaris tersedia, bentrok domain di tujuan (item `BLOCKED`, tidak ditimpa), kuota website, sisa disk (ukuran × 1,3), kuota database, SSH sumber dan tujuan. Website dengan domain expired/disabled tetap ikut dan berakhir `DUMMY_ONLY`.
-
-Kuota website per paket diatur di `config.yaml`:
+## 8. Konfigurasi (`config.yaml`)
 
 ```yaml
+storage:
+  data_dir: ./data
+api:
+  base_url: https://developers.hostinger.com
+  timeout_detik: 60
+  rate_per_menit: 60
+  retry_maks: 8
+worker:
+  website_paralel: 2
+  import_db_paralel_per_akun: 1
+backup:
+  retensi_hari: 30
+  final_sync_sebelum_cutover: true
+verifikasi:
+  timeout_http_detik: 30
+  min_asset_dicek: 3
+ssl:
+  batas_tunggu_menit: 60
+cleanup:
+  wajib_ssl_aktif: true
 kuota_paket:
   hostinger_single:
     website: 1
@@ -104,76 +155,45 @@ kuota_paket:
     website: 100
   hostinger_business:
     website: 100
+email:
+  imap_host: imap.hostinger.com:993
+  imap_tls: true
 ```
 
-Saat pertama kali dijalankan, `config.yaml` dan folder `data/` (database, log) dibuat di folder kerja.
+Token dan password tidak pernah ada di file ini.
 
-Bila token terlihat saat diketik di Git Bash, jalankan lewat `winpty ./migrator.exe` agar input tersembunyi.
+## 9. Keamanan
 
-## Cara Pakai (rencana lengkap)
+- Token API, password SSH cadangan, password database tujuan, dan password mailbox baru disimpan di **Windows Credential Manager**, tidak pernah di database, log, laporan, atau config (dibuktikan test otomatis).
+- Satu pasangan SSH key ed25519 untuk semua akun; private key hanya bisa dibaca user Windows saat ini. Laporan selalu mencantumkan akun yang masih memasang key ini.
+- Operasi destruktif (ganti password/hapus email lama, ubah DNS/domain, cleanup) hanya lewat konfirmasi per batch dan tercatat di `audit_log`.
+- Backup lokal **tidak dienkripsi**; simpan folder data di tempat aman.
+
+## 10. Keterbatasan yang Diketahui
+
+- Hostinger tidak punya endpoint ganti domain, tambah SSH key, kuota, dan restore email untuk Shared Hosting; bagian itu memakai langkah manual atau alternatif (lihat `docs/decisions.md`).
+- Password mailbox lama **tidak** bisa dipertahankan; tool membuat password baru (D-009).
+- Verifikasi dengan header `Host` ke IP tujuan sebelum cutover kemungkinan tidak berhasil di server Hostinger; tool otomatis memakai fallback (D-032).
+- Restore email ke INBOX bisa menghasilkan satu pesan ganda bila koneksi putus tepat saat penyimpanan (D-044).
+- Email untuk domain tanpa website belum dicakup.
+
+## 11. Untuk Pengembang
+
+Butuh Go 1.26+.
 
 ```bash
-./migrator.exe
+go vet ./...
+go test ./...
+go test -race ./...
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc1" -o dist/migrator.exe ./cmd/migrator
 ```
 
-Menu wizard:
+Pengujian memakai server tiruan in-process: API Hostinger, SSH yang menjalankan perintah shell sungguhan dengan `mysql`/`mysqldump` tiruan, HTTP, dan IMAP (`tests/`).
 
-```
-HOSTINGER MIGRATION MANAGER
-1. Kelola API token
-2. Siapkan SSH key
-3. Scan akun (inventaris)
-4. Buat rencana & mulai migrasi
-5. Status migrasi
-6. Tindakan manual tertunda
-7. Laporan
-0. Keluar
-```
+## 12. Dokumen Terkait
 
-Perintah langsung:
-
-```
-migrator account add|list|test|remove
-migrator ssh setup|test [akun]
-migrator audit [alias]
-migrator inventory [alias] [--refresh]
-migrator plan [--dry-run]
-migrator start | stop | status | resume
-migrator retry [--failed] [--item <domain>]
-migrator pending
-migrator confirm <KODE> <domain>
-migrator cutover [--batch <id>]
-migrator cleanup [--batch <id>]
-migrator report [--batch <id>] [--html|--json|--csv]
-migrator autostart on|off
-migrator version
-```
-
-Kode keluar: `0` sukses, `1` error, `2` butuh tindakan operator.
-
-## Keamanan
-
-- Token API dan password tidak pernah ditulis ke database, log, laporan, atau file konfigurasi.
-- Satu pasangan SSH key ed25519 dibuat oleh tool; laporan selalu mengingatkan akun mana yang masih memasang key tersebut.
-- Hanya tiga operasi destruktif (hapus email lama, ganti domain sumber, cleanup), semuanya lewat konfirmasi dan tercatat di audit log.
-- Backup lokal **tidak dienkripsi**. Simpan folder data di luar OneDrive/Google Drive/Dropbox.
-
-## Tahapan Pengembangan
-
-| Fase | Cakupan |
-|---|---|
-| 0 | Riset kontrak API Shared Hosting |
-| 1 | Fondasi: proyek Go, SQLite, config, log, Credential Manager, API client, `account` |
-| 2 | SSH key & Capability Audit |
-| 3 | Inventory, Detector, Planner |
-| 4 | Backup, Provisioning, Restore, Verifikasi, worker background |
-| 5 | Tipe website lain + Cutover domain, DNS, SSL |
-| 6 | Email |
-| 7 | Cleanup & Laporan |
-| 8 | Uji skala & rilis |
-
-## Dokumen Terkait
-
-- [`docs/PRD.md`](docs/PRD.md) — spesifikasi produk lengkap.
-- [`CLAUDE.md`](CLAUDE.md) — aturan tetap untuk Claude Code.
-- [`AGENT.md`](AGENT.md) — panduan untuk semua agent AI.
+- [`docs/PRD.md`](docs/PRD.md) — spesifikasi produk.
+- [`docs/api-shared-hosting.md`](docs/api-shared-hosting.md) — pemetaan API Hostinger untuk Shared Hosting.
+- [`docs/decisions.md`](docs/decisions.md) — catatan keputusan teknis.
+- [`docs/uji-lapangan.md`](docs/uji-lapangan.md) — daftar uji di akun Hostinger nyata.
+- [`CLAUDE.md`](CLAUDE.md), [`AGENT.md`](AGENT.md) — aturan untuk agent AI.

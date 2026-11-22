@@ -45,23 +45,40 @@ Panduan ini berlaku untuk agent AI apa pun (Claude Code, Codex, Cursor, Copilot,
 - Menambah dependency di luar tabel 5.1 PRD tanpa alasan tertulis di `docs/decisions.md`.
 - Menandai langkah selesai hanya karena HTTP 200 tanpa validasi hasil nyata.
 
-## 4. Struktur Proyek Target
+## 4. Struktur Proyek
 
 ```
 hostinger-migrator/
 ├── cmd/migrator/main.go
+├── configs/default.yaml              config bawaan (di-embed)
 ├── internal/
-│   ├── cli/ config/ store/ secrets/ hostinger/ sshx/
-│   ├── capability/ inventory/ detector/ planner/
-│   ├── backup/ restore/ verify/ cutover/ email/
-│   ├── cleanup/ pipeline/ worker/ report/
-├── internal/hostinger/contracts/*.yaml
+│   ├── cli/          perintah cobra, wizard, teks bahasa Indonesia
+│   ├── config/       config.yaml
+│   ├── store/        SQLite, repository
+│   ├── secrets/      Credential Manager, password generator
+│   ├── logx/         log JSON/teks dengan penyaringan rahasia
+│   ├── hostinger/    API client, rate limiter, contract registry (contracts/*.yaml)
+│   ├── sshx/         SSH/SFTP, SSH key, verifikasi fingerprint
+│   ├── capability/   audit kapabilitas
+│   ├── inventory/    inventaris read-only
+│   ├── detector/     deteksi tipe website, baca/ubah kredensial DB
+│   ├── planner/      rencana batch dan pemeriksaan
+│   ├── gate/         gerbang persetujuan operasi destruktif
+│   ├── backup/       tar + mysqldump streaming, manifest, hitung baris
+│   ├── provision/    website dummy di akun tujuan
+│   ├── restore/      upload, ekstrak, buat DB, import, kredensial, PHP
+│   ├── verify/       verifikasi HTTP/DB/file
+│   ├── pipeline/     state machine per website
+│   ├── cutover/      cutover domain, DNS, SSL, rollback
+│   ├── imapx/        klien IMAP minimal
+│   ├── email/        migrasi email
+│   ├── cleanup/      gerbang cleanup dan penghapusan sumber
+│   ├── report/       laporan HTML/JSON/CSV/terminal
+│   └── worker/       worker background, lock, autostart
 ├── migrations/sqlite/*.sql
-├── configs/default.yaml
-├── docs/{PRD.md,decisions.md,api-shared-hosting.md}
-├── tests/{fixtures,integration}
-├── AGENT.md
-├── CLAUDE.md
-├── README.md
+├── tests/            server tiruan (API, SSH, IMAP), testenv, uji integrasi
+├── docs/             PRD, keputusan, pemetaan API, uji lapangan
+├── dist/             migrator.exe + SHA256SUMS
+├── AGENT.md · CLAUDE.md · README.md
 └── go.mod
 ```

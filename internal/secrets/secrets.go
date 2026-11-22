@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/zalando/go-keyring"
 
@@ -120,6 +121,7 @@ func (s *Store) DeleteToken(alias string) error {
 }
 
 type MemoryBackend struct {
+	mu   sync.Mutex
 	data map[string]string
 	Fail error
 }
@@ -129,6 +131,8 @@ func NewMemoryBackend() *MemoryBackend {
 }
 
 func (m *MemoryBackend) Set(service, user, secret string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.Fail != nil {
 		return m.Fail
 	}
@@ -137,6 +141,8 @@ func (m *MemoryBackend) Set(service, user, secret string) error {
 }
 
 func (m *MemoryBackend) Get(service, user string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	v, ok := m.data[service+"\x00"+user]
 	if !ok {
 		return "", keyring.ErrNotFound
@@ -145,6 +151,8 @@ func (m *MemoryBackend) Get(service, user string) (string, error) {
 }
 
 func (m *MemoryBackend) Delete(service, user string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	k := service + "\x00" + user
 	if _, ok := m.data[k]; !ok {
 		return keyring.ErrNotFound
@@ -154,6 +162,8 @@ func (m *MemoryBackend) Delete(service, user string) error {
 }
 
 func (m *MemoryBackend) Len() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return len(m.data)
 }
 

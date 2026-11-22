@@ -48,6 +48,7 @@ type Server struct {
 	OnMailboxDelete   func(address string)
 	OnMailboxPassword func(address, password string)
 	mailCounter       int
+	failTimes         map[string][2]int
 	freeCounter       int
 	onboardings       map[string]string
 	pollCount         map[string]int
@@ -67,9 +68,22 @@ func (s *Server) SetFail(key string, status int) {
 	s.Fail[key] = status
 }
 
+func (s *Server) FailTimes(key string, status, times int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.failTimes == nil {
+		s.failTimes = map[string][2]int{}
+	}
+	s.failTimes[key] = [2]int{status, times}
+}
+
 func (s *Server) failFor(key string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if ft, ok := s.failTimes[key]; ok && ft[1] > 0 {
+		s.failTimes[key] = [2]int{ft[0], ft[1] - 1}
+		return ft[0]
+	}
 	return s.Fail[key]
 }
 
