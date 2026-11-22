@@ -25,3 +25,6 @@ kuota_paket:
     website: 100
   hostinger_business:
     website: 100
+email:
+  imap_host: imap.hostinger.com:993
+  imap_tls: true

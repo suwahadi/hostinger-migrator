@@ -14,39 +14,45 @@ import (
 
 type Server struct {
 	*httptest.Server
-	mu               sync.Mutex
-	valid            map[string]bool
-	EchoTokenInError bool
-	Orders           []hostinger.Order
-	Websites         []hostinger.Website
-	Zones            map[string][]map[string]any
-	Databases        map[string][]map[string]any
-	MailOrders       []map[string]any
-	MailStatus       int
-	Portfolio        []hostinger.PortfolioDomain
-	Subdomains       map[string][]map[string]any
-	Parked           map[string][]map[string]any
-	PHP              map[string]string
-	Cron             map[string][]map[string]any
-	Files            map[string][]map[string]any
-	Mailboxes        map[string][]map[string]any
-	WebsitesFor      map[string][]hostinger.Website
-	OrdersFor        map[string][]hostinger.Order
-	OrderUsers       map[int64]string
-	SiteRoot         func(username, domain string) string
-	OnCreateDB       func(username, name, user, password string) error
-	OnboardingPolls  int
-	Fail             map[string]int
-	ZoneWrites       []map[string]any
-	Snapshots        map[string][]map[string]any
-	SSL              map[string]string
-	SSLPolls         int
-	sslPolls         map[string]int
-	freeCounter      int
-	onboardings      map[string]string
-	pollCount        map[string]int
-	hits             map[string]int
-	writes           int
+	mu                sync.Mutex
+	valid             map[string]bool
+	EchoTokenInError  bool
+	Orders            []hostinger.Order
+	Websites          []hostinger.Website
+	Zones             map[string][]map[string]any
+	Databases         map[string][]map[string]any
+	MailOrders        []map[string]any
+	MailStatus        int
+	Portfolio         []hostinger.PortfolioDomain
+	Subdomains        map[string][]map[string]any
+	Parked            map[string][]map[string]any
+	PHP               map[string]string
+	Cron              map[string][]map[string]any
+	Files             map[string][]map[string]any
+	Mailboxes         map[string][]map[string]any
+	WebsitesFor       map[string][]hostinger.Website
+	OrdersFor         map[string][]hostinger.Order
+	OrderUsers        map[int64]string
+	SiteRoot          func(username, domain string) string
+	OnCreateDB        func(username, name, user, password string) error
+	OnboardingPolls   int
+	Fail              map[string]int
+	ZoneWrites        []map[string]any
+	Snapshots         map[string][]map[string]any
+	SSL               map[string]string
+	SSLPolls          int
+	sslPolls          map[string]int
+	MailOrdersFor     map[string][]map[string]any
+	MailExtras        map[string]map[string][]map[string]any
+	OnMailboxCreate   func(address, password string)
+	OnMailboxDelete   func(address string)
+	OnMailboxPassword func(address, password string)
+	mailCounter       int
+	freeCounter       int
+	onboardings       map[string]string
+	pollCount         map[string]int
+	hits              map[string]int
+	writes            int
 }
 
 func (s *Server) Lock()   { s.mu.Lock() }
@@ -79,7 +85,8 @@ func (s *Server) WebsitesOf(token string) []hostinger.Website {
 func New(tls bool, validTokens ...string) *Server {
 	s := &Server{valid: map[string]bool{}, hits: map[string]int{}, WebsitesFor: map[string][]hostinger.Website{}, OrdersFor: map[string][]hostinger.Order{},
 		OrderUsers: map[int64]string{}, onboardings: map[string]string{}, pollCount: map[string]int{}, Fail: map[string]int{},
-		Snapshots: map[string][]map[string]any{}, SSL: map[string]string{}, sslPolls: map[string]int{}}
+		Snapshots: map[string][]map[string]any{}, SSL: map[string]string{}, sslPolls: map[string]int{},
+		MailOrdersFor: map[string][]map[string]any{}, MailExtras: map[string]map[string][]map[string]any{}}
 	for _, t := range validTokens {
 		s.valid[t] = true
 	}
@@ -220,6 +227,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"message":"Forbidden"}`))
 			return
 		}
+		if o, ok := s.MailOrdersFor[token]; ok {
+			writePage(w, r, o)
+			return
+		}
 		writePage(w, r, s.MailOrders)
 	default:
 		s.serveDynamic(w, r)
@@ -257,8 +268,20 @@ func (s *Server) serveDynamic(w http.ResponseWriter, r *http.Request) {
 		return
 	case strings.HasPrefix(path, "/api/mail/v1/orders/") && strings.HasSuffix(path, "/mailboxes"):
 		id := strings.TrimSuffix(strings.TrimPrefix(path, "/api/mail/v1/orders/"), "/mailboxes")
-		writePage(w, r, s.Mailboxes[id])
+		s.mu.Lock()
+		list := append([]map[string]any(nil), s.Mailboxes[id]...)
+		s.mu.Unlock()
+		writePage(w, r, list)
 		return
+	case strings.HasPrefix(path, "/api/mail/v1/orders/"):
+		parts := strings.Split(strings.TrimPrefix(path, "/api/mail/v1/orders/"), "/")
+		if len(parts) == 2 {
+			s.mu.Lock()
+			list := append([]map[string]any(nil), s.MailExtras[parts[0]][parts[1]]...)
+			s.mu.Unlock()
+			writePage(w, r, list)
+			return
+		}
 	case strings.HasPrefix(path, "/api/hosting/v1/accounts/"):
 		parts := strings.Split(strings.TrimPrefix(path, "/api/hosting/v1/accounts/"), "/")
 		user := parts[0]
@@ -396,6 +419,94 @@ func (s *Server) serveWrite(w http.ResponseWriter, r *http.Request, token string
 		s.mu.Unlock()
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(map[string]any{"domain": domain, "username": user, "status": status, "created_at": "x", "updated_at": "x"})
+		return
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/mail/v1/orders/") && strings.HasSuffix(path, "/mailboxes"):
+		if fail("mail-create") {
+			return
+		}
+		order := strings.TrimSuffix(strings.TrimPrefix(path, "/api/mail/v1/orders/"), "/mailboxes")
+		local, _ := body["local_part"].(string)
+		pw, _ := body["password"].(string)
+		s.mu.Lock()
+		domain := s.mailOrderDomain(order)
+		addr := local + "@" + domain
+		for _, mb := range s.Mailboxes[order] {
+			if mb["address"] == addr {
+				s.mu.Unlock()
+				w.WriteHeader(http.StatusConflict)
+				w.Write([]byte(`{"message":"mailbox sudah ada"}`))
+				return
+			}
+		}
+		s.mailCounter++
+		mb := map[string]any{"id": fmt.Sprintf("mbx-%d", s.mailCounter), "address": addr, "status": "active", "usage": map[string]any{"messages_used": 0}}
+		s.Mailboxes[order] = append(s.Mailboxes[order], mb)
+		hook := s.OnMailboxCreate
+		s.mu.Unlock()
+		if hook != nil {
+			hook(addr, pw)
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(mb)
+		return
+	case strings.HasPrefix(path, "/api/mail/v1/mailboxes/"):
+		parts := strings.Split(strings.TrimPrefix(path, "/api/mail/v1/mailboxes/"), "/")
+		s.mu.Lock()
+		order, idx := s.findMailbox(parts[0])
+		s.mu.Unlock()
+		if idx < 0 {
+			notFound(w)
+			return
+		}
+		s.mu.Lock()
+		addr, _ := s.Mailboxes[order][idx]["address"].(string)
+		s.mu.Unlock()
+		switch {
+		case r.Method == http.MethodDelete && len(parts) == 1:
+			if fail("mail-delete") {
+				return
+			}
+			s.mu.Lock()
+			s.Mailboxes[order] = append(s.Mailboxes[order][:idx], s.Mailboxes[order][idx+1:]...)
+			hook := s.OnMailboxDelete
+			s.mu.Unlock()
+			if hook != nil {
+				hook(addr)
+			}
+			w.Write([]byte(`{"message":"ok"}`))
+			return
+		case r.Method == http.MethodPatch && len(parts) == 2 && parts[1] == "password":
+			if fail("mail-password") {
+				return
+			}
+			pw, _ := body["password"].(string)
+			if s.OnMailboxPassword != nil {
+				s.OnMailboxPassword(addr, pw)
+			}
+			w.Write([]byte(`{"message":"ok"}`))
+			return
+		case r.Method == http.MethodPost && len(parts) == 2:
+			if fail("mail-extra") {
+				return
+			}
+			entry := map[string]any{"id": fmt.Sprintf("x-%d", len(parts[1])), "mailbox": map[string]any{"id": parts[0], "address": addr}}
+			for k, v := range body {
+				entry[k] = v
+			}
+			if lp, ok := body["local_part"].(string); ok {
+				entry["address"] = lp + "@" + strings.SplitN(addr, "@", 2)[1]
+			}
+			s.mu.Lock()
+			if s.MailExtras[order] == nil {
+				s.MailExtras[order] = map[string][]map[string]any{}
+			}
+			s.MailExtras[order][parts[1]] = append(s.MailExtras[order][parts[1]], entry)
+			s.mu.Unlock()
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(entry)
+			return
+		}
+		notFound(w)
 		return
 	case strings.HasPrefix(path, "/api/dns/v1/zones/") && (r.Method == http.MethodPut || r.Method == http.MethodDelete):
 		if fail("dns") {
@@ -538,4 +649,37 @@ func (s *Server) Zone(domain string) []map[string]any {
 	var out []map[string]any
 	json.Unmarshal(b, &out)
 	return out
+}
+
+func (s *Server) mailOrderDomain(order string) string {
+	all := append([]map[string]any(nil), s.MailOrders...)
+	for _, list := range s.MailOrdersFor {
+		all = append(all, list...)
+	}
+	for _, o := range all {
+		if o["id"] == order {
+			if d, ok := o["domain"].(map[string]any); ok {
+				name, _ := d["name"].(string)
+				return name
+			}
+		}
+	}
+	return ""
+}
+
+func (s *Server) findMailbox(id string) (string, int) {
+	for order, list := range s.Mailboxes {
+		for i, mb := range list {
+			if mb["id"] == id {
+				return order, i
+			}
+		}
+	}
+	return "", -1
+}
+
+func (s *Server) MailboxesOf(order string) []map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]map[string]any(nil), s.Mailboxes[order]...)
 }

@@ -15,6 +15,7 @@ import (
 
 	"hostinger-migrator/internal/backup"
 	"hostinger-migrator/internal/cutover"
+	"hostinger-migrator/internal/email"
 	"hostinger-migrator/internal/pipeline"
 	"hostinger-migrator/internal/secrets"
 	"hostinger-migrator/internal/verify"
@@ -41,16 +42,21 @@ func (a *App) runner() *pipeline.Runner {
 		Parallel: a.cfg.Worker.WebsiteParalel,
 	}
 	cut := &cutover.Stage{FinalSync: a.cfg.Backup.FinalSyncSebelumCutover, SSLWait: time.Duration(a.cfg.SSL.BatasTungguMenit) * time.Minute}
-	d.Stages = []pipeline.Stage{cut}
+	mail := &email.Stage{IMAP: a.cfg.Email.IMAPHost, TLS: a.cfg.Email.IMAPTLS, Timeout: 2 * time.Minute}
+	d.Stages = []pipeline.Stage{cut, mail}
 	if a.env.RunnerHook != nil {
 		a.env.RunnerHook(&d)
 	}
 	if a.env.StageHook != nil {
 		a.env.StageHook(cut)
 	}
+	if a.env.EmailHook != nil {
+		a.env.EmailHook(mail)
+	}
 	d.OnBatchFinished = a.onBatchFinished
 	r := pipeline.NewRunner(d)
 	cut.Runner = r
+	mail.Runner = r
 	return r
 }
 

@@ -29,6 +29,7 @@ import (
 	"hostinger-migrator/internal/store"
 	"hostinger-migrator/internal/verify"
 	"hostinger-migrator/tests/fakehostinger"
+	"hostinger-migrator/tests/imaptest"
 	"hostinger-migrator/tests/sshtest"
 )
 
@@ -64,6 +65,7 @@ type Env struct {
 	LogBuf   *SafeBuffer
 	Config   *config.Config
 	Limiters *hostinger.LimiterPool
+	IMAP     *imaptest.Server
 	mu       sync.Mutex
 	clients  map[string]*hostinger.Client
 }
@@ -537,4 +539,61 @@ func (e *Env) Count2(itemID int64) string {
 	var s string
 	e.Store.DB().QueryRow(`SELECT instructions FROM manual_tasks WHERE item_id = ? ORDER BY id DESC LIMIT 1`, itemID).Scan(&s)
 	return s
+}
+
+const (
+	MailOldInfo  = "FAKE-lama-info-Pass1"
+	MailOldAdmin = "FAKE-lama-admin-Pass2"
+)
+
+var BigAttachment = bytes.Repeat([]byte("LAMPIRAN-BESAR-"), 200000)
+
+func (e *Env) SetupMail() {
+	e.T.Helper()
+	srv, err := imaptest.New()
+	if err != nil {
+		e.T.Fatal(err)
+	}
+	e.T.Cleanup(func() { srv.Close() })
+	e.IMAP = srv
+	a := e.API
+	a.Lock()
+	a.MailOrdersFor[SrcToken] = []map[string]any{{"id": "mo-src", "status": "active", "domain": map[string]any{"id": "d1", "name": "domainanda.com"}, "plan": map[string]any{"name": "hostinger_free"}}}
+	a.MailOrdersFor[DstToken] = []map[string]any{}
+	a.Mailboxes = map[string][]map[string]any{"mo-src": {
+		{"id": "mbx-info", "address": "info@domainanda.com", "status": "active", "usage": map[string]any{"messages_used": 3, "storage_used": 3000}},
+		{"id": "mbx-admin", "address": "admin@domainanda.com", "status": "active", "usage": map[string]any{"messages_used": 2, "storage_used": 3000}},
+	}}
+	a.MailExtras["mo-src"] = map[string][]map[string]any{
+		"aliases":     {{"id": "al1", "address": "sales@domainanda.com", "mailbox": map[string]any{"id": "mbx-info", "address": "info@domainanda.com"}}},
+		"forwarders":  {{"id": "fw1", "destination": "bos@contoh-luar.com", "is_keep_copy_enabled": true, "mailbox": map[string]any{"id": "mbx-admin", "address": "admin@domainanda.com"}}},
+		"catchalls":   {{"id": "ca1", "mailbox": map[string]any{"id": "mbx-info", "address": "info@domainanda.com"}}},
+		"autoreplies": {{"id": "ar1", "subject": "Cuti", "body": "Sedang cuti", "mailbox": map[string]any{"id": "mbx-admin", "address": "admin@domainanda.com"}}},
+	}
+	a.OnMailboxPassword = func(addr, pw string) { srv.SetPassword(addr, pw) }
+	a.OnMailboxCreate = func(addr, pw string) { srv.AddUser(addr, pw) }
+	a.OnMailboxDelete = func(addr string) { srv.DeleteUser(addr) }
+	a.Unlock()
+	srv.AddUser("info@domainanda.com", MailOldInfo)
+	srv.AddUser("admin@domainanda.com", MailOldAdmin)
+	srv.Seed("info@domainanda.com", "INBOX",
+		imaptest.Message{Flags: []string{`\Seen`}, Date: "01-Nov-2026 08:00:00 +0700", Body: []byte("Subject: Pesanan 1\r\n\r\nHalo")},
+		imaptest.Message{Flags: []string{`\Flagged`}, Date: "02-Nov-2026 08:00:00 +0700", Body: append([]byte("Subject: Lampiran\r\n\r\n"), BigAttachment...)},
+	)
+	srv.AddUser("info@domainanda.com", MailOldInfo)
+	srvCreate(srv, "info@domainanda.com", "Arsip Lama")
+	srv.Seed("info@domainanda.com", "Arsip Lama", imaptest.Message{Flags: []string{`\Seen`}, Date: "01-Jan-2025 08:00:00 +0700", Body: []byte("Subject: Lama\r\n\r\nArsip")})
+	srvCreate(srv, "admin@domainanda.com", "Sent")
+	srv.Seed("admin@domainanda.com", "INBOX", imaptest.Message{Date: "03-Nov-2026 08:00:00 +0700", Body: []byte("Subject: Admin\r\n\r\nx")})
+	srv.Seed("admin@domainanda.com", "Sent", imaptest.Message{Flags: []string{`\Seen`}, Date: "04-Nov-2026 08:00:00 +0700", Body: []byte("Subject: Terkirim\r\n\r\ny")})
+}
+
+func srvCreate(srv *imaptest.Server, addr, folder string) {
+	srv.Seed(addr, folder)
+}
+
+func (e *Env) ActivateDestMail() {
+	e.API.Lock()
+	defer e.API.Unlock()
+	e.API.MailOrdersFor[DstToken] = []map[string]any{{"id": "mo-dst", "status": "active", "domain": map[string]any{"id": "d2", "name": "domainanda.com"}, "plan": map[string]any{"name": "hostinger_free"}}}
 }

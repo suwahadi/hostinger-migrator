@@ -14,6 +14,7 @@ import (
 	"hostinger-migrator/internal/account"
 	"hostinger-migrator/internal/config"
 	"hostinger-migrator/internal/cutover"
+	"hostinger-migrator/internal/email"
 	"hostinger-migrator/internal/hostinger"
 	"hostinger-migrator/internal/logx"
 	"hostinger-migrator/internal/pipeline"
@@ -42,6 +43,7 @@ type Env struct {
 	SpawnWorker    func(ctx context.Context, a *App) error
 	RunnerHook     func(d *pipeline.Deps)
 	StageHook      func(s *cutover.Stage)
+	EmailHook      func(s *email.Stage)
 }
 
 type App struct {

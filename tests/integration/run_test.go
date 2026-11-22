@@ -10,6 +10,7 @@ import (
 
 	"hostinger-migrator/internal/cli"
 	"hostinger-migrator/internal/cutover"
+	"hostinger-migrator/internal/email"
 	"hostinger-migrator/internal/pipeline"
 	"hostinger-migrator/tests/testenv"
 )
@@ -55,6 +56,12 @@ func (h *runHarness) run(stdin string, args ...string) int {
 		},
 		StageHook: func(s *cutover.Stage) {
 			s.HTTPSScheme = "http"
+		},
+		EmailHook: func(s *email.Stage) {
+			if h.e.IMAP != nil {
+				s.IMAP = h.e.IMAP.Addr()
+				s.TLS = false
+			}
 		},
 	}
 	return cli.Execute(append([]string{"--config", h.config}, args...), env)
@@ -210,4 +217,43 @@ func TestCutoverAndRollbackCommands(t *testing.T) {
 	if it := h.e.Item("domainanda.com"); it.State != pipeline.StateVerified {
 		t.Fatalf("setelah rollback = %s", it.State)
 	}
+}
+
+func TestEmailCommands(t *testing.T) {
+	h := newRunHarness(t)
+	h.e.SetupMail()
+	h.e.Prepare("domainanda.com")
+	h.run("", "start")
+	h.run("CUTOVER\n", "cutover")
+	h.e.API.Lock()
+	for i, w := range h.e.API.WebsitesFor[testenv.SrcToken] {
+		if w.Domain == "domainanda.com" {
+			h.e.API.WebsitesFor[testenv.SrcToken][i].Domain = "sementara.hostingersite.com"
+		}
+	}
+	h.e.API.Unlock()
+	h.run("", "confirm", "MANUAL_SOURCE_RENAME", "domainanda.com", "--nilai", "sementara.hostingersite.com")
+	if it := h.e.Item("domainanda.com"); it.State != pipeline.StateEmailRunning {
+		t.Fatalf("harus menunggu email: %s %s", it.State, it.LastError)
+	}
+	code := h.run("HAPUS EMAIL\n", "email")
+	out := h.stdout.String()
+	if code != cli.ExitOK || !strings.Contains(out, "domainanda.com: 2 mailbox") || !strings.Contains(out, "info@domainanda.com (3 pesan)") || !strings.Contains(out, "Pemindahan email disetujui untuk 1 domain") {
+		t.Fatalf("email (%d): %s%s", code, out, h.stderr.String())
+	}
+	h.run("", "confirm", "MANUAL_EMAIL_SOURCE_REMOVE", "domainanda.com")
+	h.e.ActivateDestMail()
+	h.run("", "confirm", "MANUAL_EMAIL_SETUP", "domainanda.com")
+	if code := h.run("", "confirm", "MANUAL_EMAIL_DNS", "domainanda.com"); code != cli.ExitOK {
+		t.Fatalf("confirm DNS: %s%s", h.stdout.String(), h.stderr.String())
+	}
+	if it := h.e.Item("domainanda.com"); it.State != pipeline.StateCleanupReady {
+		t.Fatalf("akhir = %s %s %s", it.State, it.EmailState, it.LastError)
+	}
+	code = h.run("", "email", "passwords", "--domain", "domainanda.com")
+	out = h.stdout.String()
+	if code != cli.ExitOK || !strings.Contains(out, "info@domainanda.com") || !strings.Contains(out, "admin@domainanda.com") {
+		t.Fatalf("passwords: %s", out)
+	}
+	h.e.AssertNoSecretsOnDisk(testenv.MailOldInfo, testenv.MailOldAdmin)
 }

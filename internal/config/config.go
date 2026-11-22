@@ -23,6 +23,12 @@ type Config struct {
 	SSL        SSLConfig        `yaml:"ssl"`
 	Cleanup    CleanupConfig    `yaml:"cleanup"`
 	KuotaPaket map[string]Kuota `yaml:"kuota_paket"`
+	Email      EmailConfig      `yaml:"email"`
+}
+
+type EmailConfig struct {
+	IMAPHost string `yaml:"imap_host"`
+	IMAPTLS  bool   `yaml:"imap_tls"`
 }
 
 type Kuota struct {
@@ -143,6 +149,9 @@ func (c *Config) Validate() error {
 	}
 	if c.SSL.BatasTungguMenit < 1 {
 		problems = append(problems, "ssl.batas_tunggu_menit minimal 1")
+	}
+	if !strings.Contains(c.Email.IMAPHost, ":") {
+		problems = append(problems, "email.imap_host harus berformat host:port")
 	}
 	for name, k := range c.KuotaPaket {
 		if k.Website < 0 || k.Database < 0 {
