@@ -172,13 +172,13 @@ func TestRemoveRequiresConfirmation(t *testing.T) {
 
 func TestWizardFlow(t *testing.T) {
 	h := newHarness(t)
-	input := strings.Join([]string{"9", "1", "1", goodToken, "wizard", "2", "0", "0"}, "\n") + "\n"
+	input := strings.Join([]string{"99", "1", "1", goodToken, "wizard", "2", "0", "0"}, "\n") + "\n"
 	code := h.run(input)
 	out := h.stdout.String()
 	if code != cli.ExitOK {
 		t.Fatalf("wizard exit %d: %s", code, h.stderr.String())
 	}
-	for _, want := range []string{"HOSTINGER MIGRATION MANAGER", "1. Kelola API token", "Pilihan tidak dikenal", "KELOLA API TOKEN", "Ditemukan 2 akun di token wizard", "Sampai jumpa"} {
+	for _, want := range []string{"INFORMASI PROGRAM", " Nama Program : Hostinger Migrator", " Pembuat      : Suwahadi", " Platform     : Windows 10/11 64bit", "Dibuat oleh: Suwahadi (c) 2026", "HOSTINGER MIGRATION MANAGER", " 1. Kelola API token", "11. Kendali worker & pemulihan", "Pilihan tidak dikenal", "KELOLA API TOKEN", "Ditemukan 2 akun di token wizard", "Sampai jumpa"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("wizard tidak memuat %q:\n%s", want, out)
 		}

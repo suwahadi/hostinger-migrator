@@ -54,6 +54,9 @@ func Execute(args []string, env Env) int {
 	}
 	msg := app.redactor.String(translateCobraError(err.Error()))
 	fmt.Fprintln(app.env.Stderr, "ERROR: "+msg)
+	if app.wizardMode {
+		app.prompt.Line("Tekan ENTER untuk menutup jendela...")
+	}
 	var ee *exitError
 	if errors.As(err, &ee) {
 		return ee.code
@@ -94,6 +97,9 @@ func newRootCmd(app *App) *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Name() == "version" || cmd.Name() == "help" {
 				return nil
+			}
+			if cmd == cmd.Root() {
+				app.wizardMode = true
 			}
 			return app.open(cmd.Context())
 		},

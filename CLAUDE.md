@@ -67,7 +67,7 @@ Dokumen acuan utama: [`docs/PRD.md`](docs/PRD.md). Baca bagian 19 PRD dan file i
 | Fase 5 — Cutover, DNS, SSL, Rollback | Selesai di sisi kode dan test |
 | Fase 6 — Email | Selesai di sisi kode dan test |
 | Fase 7 — Cleanup & Laporan | Selesai di sisi kode dan test |
-| Fase 8 — Uji skala & rilis | Uji skala otomatis (15 website + gangguan) lulus; rilis `1.0.0-rc1` di `dist/migrator.exe` |
+| Fase 8 — Uji skala & rilis | Uji skala otomatis (15 website + gangguan) lulus; rilis `1.0.0-rc2` di `dist/migrator.exe` (wizard lengkap + banner informasi program) |
 | Uji lapangan di akun Hostinger nyata | **Menunggu operator** — ikuti `docs/uji-lapangan.md` |
 
 Keputusan email dan cutover: lihat `docs/decisions.md` D-008 sampai D-011 (password mailbox dibuat baru, restore via IMAP APPEND, Free Business Email).

@@ -60,6 +60,7 @@ type App struct {
 	prompt     *Prompter
 	redactor   *logx.Redactor
 	lookupNS   func(ctx context.Context, domain string) ([]string, error)
+	wizardMode bool
 }
 
 type exitError struct {

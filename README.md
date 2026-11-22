@@ -2,7 +2,7 @@
 
 Alat baris perintah (CLI) untuk memindahkan website beserta layanan terkait — file, database, DNS, SSL, dan email — dari satu akun Hostinger Shared Hosting ke akun Hostinger lain secara otomatis, aman, bisa dilanjutkan setelah gangguan, dan menghasilkan laporan lengkap dalam bahasa Indonesia.
 
-> **Status: v1.0.0-rc1.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
+> **Status: v1.0.0-rc2.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
 
 ---
 
@@ -23,13 +23,44 @@ Hasil harus `migrator.exe: OK`.
 3. Siapkan **API token** hPanel untuk akun sumber dan tujuan (hPanel → Profil → API).
 4. Pastikan **SSH aktif** di hPanel → Advanced → SSH Access untuk setiap akun hosting (paket tanpa SSH tetap bisa, lewat jalur backup manual).
 
-Jalankan dari Git Bash di folder kerja:
+Cara menjalankan:
 
-```bash
-cd /c/migrasi
-./migrator.exe            # wizard menu utama
-./migrator.exe --help     # daftar perintah
+- **Klik dua kali `migrator.exe`** — jendela konsol terbuka dan wizard muncul. Seluruh alur migrasi bisa dikerjakan dari menu ini.
+- Atau dari Git Bash/CMD di folder kerja: `./migrator.exe` (wizard) atau `./migrator.exe <perintah>` (perintah langsung, lihat bagian 7).
+
+Tampilan awal wizard:
+
 ```
+==================================
+        INFORMASI PROGRAM
+==================================
+
+ Nama Program : Hostinger Migrator
+ Pembuat      : Suwahadi
+ Versi        : 1.0.0-rc2
+ Platform     : Windows 10/11 64bit
+
+==================================
+  Dibuat oleh: Suwahadi (c) 2026
+==================================
+
+MENU UTAMA — HOSTINGER MIGRATION MANAGER
+ 1. Kelola API token
+ 2. Siapkan SSH key & audit
+ 3. Scan akun (inventaris)
+ 4. Buat rencana & mulai migrasi
+ 5. Status migrasi
+ 6. Tindakan manual (lihat & konfirmasi)
+ 7. Cutover domain
+ 8. Pindahkan email
+ 9. Bersihkan akun sumber (cleanup)
+10. Laporan
+11. Kendali worker & pemulihan
+ 0. Keluar
+Pilih:
+```
+
+Keluar dari wizard tidak menghentikan worker yang sedang berjalan di background. Bila terjadi error saat program dibuka (mis. `config.yaml` salah), jendela menunggu ENTER agar pesan sempat dibaca.
 
 Bila token terlihat saat diketik, jalankan lewat `winpty ./migrator.exe`.
 
@@ -37,19 +68,21 @@ Saat pertama kali dijalankan, tool membuat `config.yaml` dan folder `data/` (dat
 
 ## 3. Alur Migrasi Langkah demi Langkah
 
-| # | Langkah | Perintah | Catatan |
+Kolom **Menu** adalah nomor di wizard; kolom **Perintah** untuk yang lebih suka mengetik.
+
+| # | Langkah | Menu / Perintah | Catatan |
 |---|---|---|---|
-| 1 | Daftarkan token sumber dan tujuan | `migrator account add` | Token disimpan di Windows Credential Manager, akun `uXXXXXXXX` ditemukan otomatis |
-| 2 | Siapkan SSH | `migrator ssh setup` | Tempel public key yang ditampilkan di hPanel tiap akun, isi IP/port/username |
-| 3 | Audit kapabilitas | `migrator audit` | Read-only. `SUPPORTED` hanya untuk yang teruji nyata |
-| 4 | Inventaris | `migrator inventory` | Root path, tipe, ukuran, database, mailbox, status domain |
+| 1 | Daftarkan token sumber dan tujuan | Menu 1 · `migrator account add` | Token disimpan di Windows Credential Manager, akun `uXXXXXXXX` ditemukan otomatis |
+| 2 | Siapkan SSH | Menu 2 · `migrator ssh setup` | Tempel public key yang ditampilkan di hPanel tiap akun, isi IP/port/username |
+| 3 | Audit kapabilitas | Menu 2 → 4 · `migrator audit` | Read-only. `SUPPORTED` hanya untuk yang teruji nyata |
+| 4 | Inventaris | Menu 3 · `migrator inventory` | Root path, tipe, ukuran, database, mailbox, status domain |
 | 5 | Rencana (uji dulu) | `migrator plan --dry-run` | Semua pemeriksaan + urutan langkah, tanpa mengubah apa pun |
-| 6 | Rencana (simpan) | `migrator plan` | Ketik `LANJUT` (bila ada peringatan) lalu `YAKIN`; worker langsung berjalan di background |
-| 7 | Pantau | `migrator status` · `migrator pending` | Kerjakan tindakan manual lalu `migrator confirm <KODE> <domain>` |
-| 8 | Cutover domain | `migrator cutover` | Ketik `CUTOVER`; Anda akan diminta mengganti domain sumber ke domain sementara di hPanel |
-| 9 | Pindah email | `migrator email` | Ketik `HAPUS EMAIL`; password mailbox baru: `migrator email passwords` |
-| 10 | Bersihkan sumber | `migrator cleanup` | Hanya item yang lolos semua gerbang; ketik `HAPUS` |
-| 11 | Laporan | `migrator report` | `data/reports/<batch>/laporan.html`, `.json`, `.csv` |
+| 6 | Rencana (simpan) | Menu 4 · `migrator plan` | Ketik `LANJUT` (bila ada peringatan) lalu `YAKIN`; worker langsung berjalan di background |
+| 7 | Pantau & konfirmasi | Menu 5, Menu 6 · `migrator status`, `migrator pending`, `migrator confirm <KODE> <domain>` | Di Menu 6 cukup pilih nomor tindakan yang sudah dikerjakan |
+| 8 | Cutover domain | Menu 7 · `migrator cutover` | Ketik `CUTOVER`; Anda akan diminta mengganti domain sumber ke domain sementara di hPanel |
+| 9 | Pindah email | Menu 8 · `migrator email` | Ketik `HAPUS EMAIL`; password mailbox baru: `migrator email passwords` |
+| 10 | Bersihkan sumber | Menu 9 · `migrator cleanup` | Hanya item yang lolos semua gerbang; ketik `HAPUS` |
+| 11 | Laporan | Menu 10 · `migrator report` | `data/reports/<batch>/laporan.html`, `.json`, `.csv` |
 | 12 | Penutup | — | Hapus SSH key `hostinger-migrator` di hPanel semua akun, `migrator ssh remove-password <akun>`, `migrator autostart off` |
 
 ### Apa yang terjadi otomatis per website
@@ -185,7 +218,7 @@ Butuh Go 1.26+.
 go vet ./...
 go test ./...
 go test -race ./...
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc1" -o dist/migrator.exe ./cmd/migrator
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc2" -o dist/migrator.exe ./cmd/migrator
 ```
 
 Pengujian memakai server tiruan in-process: API Hostinger, SSH yang menjalankan perintah shell sungguhan dengan `mysql`/`mysqldump` tiruan, HTTP, dan IMAP (`tests/`).

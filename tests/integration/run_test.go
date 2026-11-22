@@ -310,3 +310,96 @@ func TestCleanupAndReportCommands(t *testing.T) {
 	}
 	h.e.AssertNoSecretsOnDisk(testenv.WPPassword, testenv.LVPassword, testenv.SrcToken, testenv.DstToken)
 }
+
+func TestWizardOnlyFullFlow(t *testing.T) {
+	h := newRunHarness(t)
+	h.e.Prepare("domainanda.com")
+	h.e.API.Lock()
+	for i, w := range h.e.API.WebsitesFor[testenv.SrcToken] {
+		if w.Domain == "domainanda.com" {
+			h.e.API.WebsitesFor[testenv.SrcToken][i].Domain = "sementara.hostingersite.com"
+		}
+	}
+	h.e.API.Unlock()
+	input := strings.Join([]string{
+		"11", "1", "0",
+		"7", "CUTOVER",
+		"6", "1", "sementara.hostingersite.com", "y",
+		"9", "T", "", "HAPUS",
+		"10",
+		"0",
+	}, "\n") + "\n"
+	code := h.run(input)
+	out := h.stdout.String()
+	if code != cli.ExitOK {
+		t.Fatalf("wizard (%d): %s%s", code, out, h.stderr.String())
+	}
+	for _, want := range []string{
+		"INFORMASI PROGRAM",
+		"KENDALI WORKER & PEMULIHAN",
+		"Cutover disetujui untuk 1 website",
+		"TINDAKAN MANUAL",
+		"[1] MANUAL_SOURCE_RENAME · domainanda.com",
+		"Domain sementara yang sekarang dipakai website sumber",
+		"MANUAL_SOURCE_RENAME untuk domainanda.com dikonfirmasi",
+		"Tidak ada tindakan manual yang menunggu",
+		"Lolos gerbang",
+		"LAPORAN MIG-",
+		"Sampai jumpa. Worker yang sedang berjalan tetap bekerja di background.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("wizard tidak memuat %q", want)
+		}
+	}
+	if t.Failed() {
+		t.Log(out, h.stderr.String())
+	}
+	if it := h.e.Item("domainanda.com"); it.State != pipeline.StateCompleted {
+		t.Fatalf("status akhir = %s/%s %s", it.State, it.SideState, it.LastError)
+	}
+}
+
+func TestWizardRollbackAndEmailMenus(t *testing.T) {
+	h := newRunHarness(t)
+	h.e.Prepare("domainanda.com")
+	h.e.API.Lock()
+	for i, w := range h.e.API.WebsitesFor[testenv.SrcToken] {
+		if w.Domain == "domainanda.com" {
+			h.e.API.WebsitesFor[testenv.SrcToken][i].Domain = "sementara.hostingersite.com"
+		}
+	}
+	h.e.API.Unlock()
+	input := strings.Join([]string{
+		"11", "1", "0",
+		"7", "CUTOVER",
+		"6", "1", "sementara.hostingersite.com", "y",
+		"8", "1", "2", "0",
+		"11", "5", "1", "ROLLBACK", "4", "T", "0",
+		"0",
+	}, "\n") + "\n"
+	code := h.run(input)
+	out := h.stdout.String()
+	for _, want := range []string{"PINDAHKAN EMAIL", "Tidak ada domain yang menunggu persetujuan email", "Belum ada password mailbox baru", "1. domainanda.com (CLEANUP_READY)", "DNS dikembalikan", "kembali ke status VERIFIED", "Tidak ada website yang perlu diulang"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("wizard tidak memuat %q", want)
+		}
+	}
+	if t.Failed() || code != cli.ExitOK {
+		t.Fatalf("(%d)\n%s%s", code, out, h.stderr.String())
+	}
+	if it := h.e.Item("domainanda.com"); it.State != pipeline.StateVerified {
+		t.Fatalf("setelah rollback = %s", it.State)
+	}
+}
+
+func TestWizardPausesOnStartupError(t *testing.T) {
+	h := newRunHarness(t)
+	os.WriteFile(h.config, []byte("api:\n  kunci_salah: 1\n"), 0o600)
+	code := h.run("\n")
+	if code != cli.ExitError || !strings.Contains(h.stdout.String(), "Tekan ENTER untuk menutup jendela") || !strings.Contains(h.stderr.String(), "config") {
+		t.Fatalf("(%d) out=%s err=%s", code, h.stdout.String(), h.stderr.String())
+	}
+	if code := h.run("", "account", "list"); strings.Contains(h.stdout.String(), "Tekan ENTER") || code != cli.ExitError {
+		t.Fatal("perintah langsung tidak boleh menunggu ENTER")
+	}
+}

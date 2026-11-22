@@ -10,88 +10,95 @@ import (
 type menuEntry struct {
 	key   string
 	label string
-	phase int
 }
 
 var mainMenu = []menuEntry{
-	{"1", "Kelola API token", 1},
-	{"2", "Siapkan SSH key", 2},
-	{"3", "Scan akun (inventaris)", 3},
-	{"4", "Buat rencana & mulai migrasi", 3},
-	{"5", "Status migrasi", 4},
-	{"6", "Tindakan manual tertunda", 4},
-	{"7", "Laporan", 7},
+	{"1", "Kelola API token"},
+	{"2", "Siapkan SSH key & audit"},
+	{"3", "Scan akun (inventaris)"},
+	{"4", "Buat rencana & mulai migrasi"},
+	{"5", "Status migrasi"},
+	{"6", "Tindakan manual (lihat & konfirmasi)"},
+	{"7", "Cutover domain"},
+	{"8", "Pindahkan email"},
+	{"9", "Bersihkan akun sumber (cleanup)"},
+	{"10", "Laporan"},
+	{"11", "Kendali worker & pemulihan"},
 }
 
-const implementedPhase = 7
+const bannerWidth = 34
+
+func center(s string) string {
+	pad := (bannerWidth - len([]rune(s))) / 2
+	if pad < 0 {
+		pad = 0
+	}
+	return strings.Repeat(" ", pad) + s
+}
+
+func (a *App) banner() {
+	line := strings.Repeat("=", bannerWidth)
+	a.println(line)
+	a.println(center("INFORMASI PROGRAM"))
+	a.println(line)
+	a.println()
+	a.println(" Nama Program : Hostinger Migrator")
+	a.println(" Pembuat      : Suwahadi")
+	a.println(" Versi        : " + Version)
+	a.println(" Platform     : Windows 10/11 64bit")
+	a.println()
+	a.println(line)
+	a.println(center("Dibuat oleh: Suwahadi (c) 2026"))
+	a.println(line)
+}
 
 func (a *App) runWizard(ctx context.Context) error {
+	a.banner()
 	for {
 		a.println()
-		a.println("HOSTINGER MIGRATION MANAGER")
+		a.println("MENU UTAMA — HOSTINGER MIGRATION MANAGER")
 		for _, m := range mainMenu {
-			suffix := ""
-			if m.phase > implementedPhase {
-				suffix = "  (belum tersedia)"
-			}
-			a.printf("%s. %s%s\n", m.key, m.label, suffix)
+			a.printf("%2s. %s\n", m.key, m.label)
 		}
-		a.println("0. Keluar")
+		a.println(" 0. Keluar")
 		choice, err := a.prompt.Line("Pilih: ")
 		if err != nil {
 			return err
 		}
-		choice = strings.TrimSpace(choice)
-		switch choice {
+		var actionErr error
+		switch strings.TrimSpace(choice) {
 		case "0":
-			a.println("Sampai jumpa.")
+			a.println("Sampai jumpa. Worker yang sedang berjalan tetap bekerja di background.")
 			return nil
 		case "1":
-			if err := a.tokenMenu(ctx); err != nil {
-				return err
-			}
+			actionErr = a.tokenMenu(ctx)
 		case "2":
-			if err := a.sshMenu(ctx); err != nil {
-				return err
-			}
+			actionErr = a.sshMenu(ctx)
 		case "3":
-			if err := a.wizardAction(a.runInventory(ctx, "", a.askRefresh())); err != nil {
-				return err
-			}
+			actionErr = a.runInventory(ctx, "", a.askRefresh())
 		case "4":
-			if err := a.wizardAction(a.runPlan(ctx, planOptions{})); err != nil {
-				return err
-			}
+			actionErr = a.runPlan(ctx, planOptions{})
 		case "5":
-			if err := a.wizardAction(a.showStatus(ctx, "", "")); err != nil {
-				return err
-			}
+			actionErr = a.showStatus(ctx, "", "")
 		case "6":
-			if err := a.wizardAction(a.showPending(ctx, false)); err != nil {
-				return err
-			}
+			actionErr = a.manualMenu(ctx)
 		case "7":
-			if err := a.wizardAction(a.runReport(ctx, "", map[string]bool{"html": true, "json": true, "csv": true})); err != nil {
-				return err
-			}
+			actionErr = a.runCutover(ctx, "", "")
+		case "8":
+			actionErr = a.emailMenu(ctx)
+		case "9":
+			actionErr = a.cleanupWizard(ctx)
+		case "10":
+			actionErr = a.runReport(ctx, "", map[string]bool{"html": true, "json": true, "csv": true})
+		case "11":
+			actionErr = a.workerMenu(ctx)
 		default:
-			entry, ok := findMenu(choice)
-			if !ok {
-				a.println("Pilihan tidak dikenal.")
-				continue
-			}
-			a.printf("Menu %q belum tersedia pada versi ini (dikerjakan di Fase %d).\n", entry.label, entry.phase)
+			a.println("Pilihan tidak dikenal.")
+		}
+		if err := a.wizardAction(actionErr); err != nil {
+			return err
 		}
 	}
-}
-
-func findMenu(key string) (menuEntry, bool) {
-	for _, m := range mainMenu {
-		if m.key == key {
-			return m, true
-		}
-	}
-	return menuEntry{}, false
 }
 
 func (a *App) tokenMenu(ctx context.Context) error {
