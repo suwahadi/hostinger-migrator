@@ -353,6 +353,39 @@ func TestLimiterSpacesRequests(t *testing.T) {
 	}
 }
 
+func TestLimiterBurstThenSpaces(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	sl := &sleeper{}
+	l := NewLimiterWithBurst(60, 3)
+	l.SetClock(func() time.Time { return now }, sl.sleep)
+	for i := 0; i < 5; i++ {
+		l.Wait(context.Background())
+	}
+	if len(sl.waits) != 2 || sl.waits[0] != time.Second || sl.waits[1] != 2*time.Second {
+		t.Fatalf("waits = %v", sl.waits)
+	}
+	now = now.Add(time.Hour)
+	sl.waits = nil
+	for i := 0; i < 3; i++ {
+		l.Wait(context.Background())
+	}
+	if len(sl.waits) != 0 {
+		t.Fatalf("setelah jeda panjang burst harus tersedia lagi: %v", sl.waits)
+	}
+}
+
+func TestLimiterBurstRespectsPause(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	sl := &sleeper{}
+	l := NewLimiterWithBurst(60, 5)
+	l.SetClock(func() time.Time { return now }, sl.sleep)
+	l.PauseUntil(now.Add(10 * time.Second))
+	l.Wait(context.Background())
+	if len(sl.waits) != 1 || sl.waits[0] != 10*time.Second {
+		t.Fatalf("waits = %v", sl.waits)
+	}
+}
+
 func TestLimiterObserveHeaders(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	sl := &sleeper{}

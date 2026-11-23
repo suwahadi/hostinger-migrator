@@ -111,7 +111,7 @@ func (a *App) runPlan(ctx context.Context, o planOptions) error {
 	if _, err := a.store.GetCredential(ctx, o.sourceAlias); err != nil {
 		return needsAction(fmt.Errorf("alias sumber %s tidak terdaftar", o.sourceAlias))
 	}
-	if err := a.ensureInventory(ctx, o.sourceAlias, false); err != nil {
+	if err := a.ensureInventory(ctx, o.sourceAlias, inventoryOptions{}); err != nil {
 		return err
 	}
 	listed, err := a.listInventory(ctx, o.sourceAlias)

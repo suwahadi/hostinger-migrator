@@ -12,6 +12,7 @@ import (
 type Limiter struct {
 	mu          sync.Mutex
 	interval    time.Duration
+	burst       int
 	next        time.Time
 	pausedUntil time.Time
 	now         func() time.Time
@@ -19,11 +20,19 @@ type Limiter struct {
 }
 
 func NewLimiter(perMinute int) *Limiter {
+	return NewLimiterWithBurst(perMinute, 1)
+}
+
+func NewLimiterWithBurst(perMinute, burst int) *Limiter {
 	if perMinute < 1 {
 		perMinute = 1
 	}
+	if burst < 1 {
+		burst = 1
+	}
 	return &Limiter{
 		interval: time.Minute / time.Duration(perMinute),
+		burst:    burst,
 		now:      time.Now,
 		sleep:    sleepCtx,
 	}
@@ -43,9 +52,9 @@ func (l *Limiter) SetClock(now func() time.Time, sleep func(context.Context, tim
 func (l *Limiter) Wait(ctx context.Context) error {
 	l.mu.Lock()
 	now := l.now()
-	slot := now
-	if l.next.After(slot) {
-		slot = l.next
+	slot := l.next
+	if floor := now.Add(-time.Duration(l.burst-1) * l.interval); slot.Before(floor) {
+		slot = floor
 	}
 	if l.pausedUntil.After(slot) {
 		slot = l.pausedUntil
@@ -133,11 +142,16 @@ func (l *Limiter) Interval() time.Duration {
 type LimiterPool struct {
 	mu        sync.Mutex
 	perMinute int
+	burst     int
 	byKey     map[string]*Limiter
 }
 
 func NewLimiterPool(perMinute int) *LimiterPool {
-	return &LimiterPool{perMinute: perMinute, byKey: map[string]*Limiter{}}
+	return NewLimiterPoolWithBurst(perMinute, 1)
+}
+
+func NewLimiterPoolWithBurst(perMinute, burst int) *LimiterPool {
+	return &LimiterPool{perMinute: perMinute, burst: burst, byKey: map[string]*Limiter{}}
 }
 
 func (p *LimiterPool) For(key string) *Limiter {
@@ -145,7 +159,7 @@ func (p *LimiterPool) For(key string) *Limiter {
 	defer p.mu.Unlock()
 	l, ok := p.byKey[key]
 	if !ok {
-		l = NewLimiter(p.perMinute)
+		l = NewLimiterWithBurst(p.perMinute, p.burst)
 		p.byKey[key] = l
 	}
 	return l

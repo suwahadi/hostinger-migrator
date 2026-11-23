@@ -24,6 +24,8 @@ Persiapan: satu akun uji **Single** dan satu akun uji **Premium/Business** (sumb
 | B2 | Apakah Free Business Email muncul di inventaris (R9) | Mailbox tampil | |
 | B3 | `plan --dry-run` ke akun dengan kuota penuh | Ditolak `KUOTA_WEBSITE` | |
 | B4 | Cocokkan kuota paket di `config.yaml` dengan hPanel | Sesuaikan bila berbeda | |
+| B5 | `inventory --refresh` dengan `rate_per_menit: 80`: catat durasi total dan cari `batas rate API tercapai` di `data/logs/*.log` | Progres per website tampil; tidak ada atau jarang 429 | |
+| B6 | `inventory --refresh --cepat` di akun yang sama | Lebih cepat, ukuran `?`, tipe sama dengan scan penuh | |
 
 ## C. Backup, Provisioning, Restore, Verifikasi (Fase 4)
 

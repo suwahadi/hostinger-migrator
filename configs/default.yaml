@@ -3,7 +3,8 @@ storage:
 api:
   base_url: https://developers.hostinger.com
   timeout_detik: 60
-  rate_per_menit: 60
+  rate_per_menit: 80
+  rate_burst: 5
   retry_maks: 8
 worker:
   website_paralel: 2

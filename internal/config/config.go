@@ -44,6 +44,7 @@ type APIConfig struct {
 	BaseURL      string `yaml:"base_url"`
 	TimeoutDetik int    `yaml:"timeout_detik"`
 	RatePerMenit int    `yaml:"rate_per_menit"`
+	RateBurst    int    `yaml:"rate_burst"`
 	RetryMaks    int    `yaml:"retry_maks"`
 }
 
@@ -128,6 +129,9 @@ func (c *Config) Validate() error {
 	}
 	if c.API.RatePerMenit < 1 {
 		problems = append(problems, "api.rate_per_menit minimal 1")
+	}
+	if c.API.RateBurst < 1 || c.API.RateBurst > 20 {
+		problems = append(problems, "api.rate_burst harus 1 sampai 20")
 	}
 	if c.API.RetryMaks < 0 || c.API.RetryMaks > 20 {
 		problems = append(problems, "api.retry_maks harus 0 sampai 20")

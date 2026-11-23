@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -17,7 +18,7 @@ import (
 )
 
 func newInventoryCmd(app *App) *cobra.Command {
-	var refresh bool
+	var opt inventoryOptions
 	cmd := &cobra.Command{
 		Use:   "inventory [alias]",
 		Short: "Inventaris website, root path, tipe, ukuran, database, mailbox (read-only)",
@@ -28,10 +29,11 @@ func newInventoryCmd(app *App) *cobra.Command {
 			if len(args) == 1 {
 				alias = args[0]
 			}
-			return app.runInventory(cmd.Context(), alias, refresh)
+			return app.runInventory(cmd.Context(), alias, opt)
 		},
 	}
-	cmd.Flags().BoolVar(&refresh, "refresh", false, "pindai ulang walaupun inventaris sudah ada")
+	cmd.Flags().BoolVar(&opt.Refresh, "refresh", false, "pindai ulang walaupun inventaris sudah ada")
+	cmd.Flags().BoolVar(&opt.Quick, "cepat", false, "scan cepat: ukuran folder dan jumlah file tidak dihitung")
 	return cmd
 }
 
@@ -78,12 +80,35 @@ func (a *App) aliases(ctx context.Context, alias string) ([]string, error) {
 	return out, nil
 }
 
-func (a *App) ensureInventory(ctx context.Context, alias string, refresh bool) error {
+type inventoryOptions struct {
+	Refresh bool
+	Quick   bool
+}
+
+func (a *App) inventoryProgress(p inventory.Progress) {
+	switch p.Stage {
+	case inventory.StageAccount:
+		a.printf("Akun %s: %d website ditemukan, dipindai %d sekaligus.\n", p.AccountID, p.Total, min(inventory.DefaultParallel, max(p.Total, 1)))
+	case inventory.StageWebsite:
+		t := p.Type
+		if t == "" {
+			t = "?"
+		}
+		line := fmt.Sprintf("  [%d/%d] %s  %s  %s  %s", p.Done, p.Total, p.Domain, t, sizeLabel(p.SizeBytes), p.Elapsed.Round(time.Second))
+		if p.Warnings > 0 {
+			a.say(toneWarn, fmt.Sprintf("%s  (%d peringatan)", line, p.Warnings))
+			return
+		}
+		a.println(line)
+	}
+}
+
+func (a *App) ensureInventory(ctx context.Context, alias string, opt inventoryOptions) error {
 	accs, err := a.store.ListHostingAccounts(ctx, alias)
 	if err != nil {
 		return err
 	}
-	need := refresh
+	need := opt.Refresh
 	for _, acc := range accs {
 		if _, err := a.store.GetInventoryRun(ctx, acc.ID, alias); errors.Is(err, store.ErrNotFound) {
 			need = true
@@ -92,8 +117,19 @@ func (a *App) ensureInventory(ctx context.Context, alias string, refresh bool) e
 	if !need {
 		return nil
 	}
-	a.printf("Memindai inventaris token %s (read-only)...\n", alias)
-	_, err = a.scanner().ScanAlias(ctx, alias)
+	mode := ""
+	if opt.Quick {
+		mode = ", scan cepat tanpa hitung ukuran"
+	}
+	a.printf("Memindai inventaris token %s (read-only%s)...\n", alias, mode)
+	started := time.Now()
+	sc := a.scanner()
+	sc.SkipSize = opt.Quick
+	sc.Progress = a.inventoryProgress
+	_, err = sc.ScanAlias(ctx, alias)
+	if err == nil {
+		a.say(toneOK, fmt.Sprintf("Pemindaian token %s selesai dalam %s.", alias, time.Since(started).Round(time.Second)))
+	}
 	if errors.Is(err, inventory.ErrTokenRejected) {
 		a.store.WithTxUpdateCredential(ctx, alias, store.CredentialRejected, a.redactor.String(err.Error()))
 		return needsAction(err)
@@ -104,14 +140,14 @@ func (a *App) ensureInventory(ctx context.Context, alias string, refresh bool) e
 	return err
 }
 
-func (a *App) runInventory(ctx context.Context, alias string, refresh bool) error {
+func (a *App) runInventory(ctx context.Context, alias string, opt inventoryOptions) error {
 	aliases, err := a.aliases(ctx, alias)
 	if err != nil {
 		return err
 	}
 	var failed []error
 	for _, al := range aliases {
-		if err := a.ensureInventory(ctx, al, refresh); err != nil {
+		if err := a.ensureInventory(ctx, al, opt); err != nil {
 			var ee *exitError
 			if errors.As(err, &ee) {
 				a.printError(err.Error())
@@ -127,7 +163,7 @@ func (a *App) runInventory(ctx context.Context, alias string, refresh bool) erro
 		}
 	}
 	a.println()
-	a.println("Ukuran \"?\" berarti tidak diketahui (SSH belum siap). Tipe diberi persen bila keyakinan deteksi di bawah 70%.")
+	a.println("Ukuran \"?\" berarti tidak diketahui (SSH belum siap atau scan cepat). Tipe diberi persen bila keyakinan deteksi di bawah 70%.")
 	if len(failed) > 0 {
 		return needsAction(errors.Join(failed...))
 	}

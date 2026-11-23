@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"hostinger-migrator/internal/detector"
@@ -34,6 +35,35 @@ type Scanner struct {
 	Log          *slog.Logger
 	LookupNS     func(ctx context.Context, domain string) ([]string, error)
 	ProbeTimeout time.Duration
+	Parallel     int
+	SkipSize     bool
+	Progress     func(Progress)
+}
+
+const DefaultParallel = 4
+
+type Progress struct {
+	AccountID string
+	Stage     string
+	Done      int
+	Total     int
+	Domain    string
+	Type      string
+	SizeBytes int64
+	Elapsed   time.Duration
+	Warnings  int
+}
+
+const (
+	StageAccount = "akun"
+	StageWebsite = "website"
+)
+
+type siteResult struct {
+	website   store.Website
+	warnings  []string
+	refs      []detector.DBRef
+	mailboxes []store.MailboxRow
 }
 
 type aliasCache struct {
@@ -117,6 +147,13 @@ func (s *Scanner) ScanAccount(ctx context.Context, client *hostinger.Client, cac
 		return nil, fmt.Errorf("gagal membaca daftar website akun %s: %w", acc.ID, err)
 	}
 	sort.Slice(sites, func(i, j int) bool { return sites[i].Domain < sites[j].Domain })
+	var todo []hostinger.Website
+	for _, site := range sites {
+		if site.Domain != "" {
+			todo = append(todo, site)
+		}
+	}
+	s.report(Progress{AccountID: acc.ID, Stage: StageAccount, Total: len(todo)})
 	s.loadAliasData(ctx, client, cache)
 	if cache.portfolioErr != nil {
 		warn("Portfolio domain tidak terbaca (%v); status domain ditentukan dari DNS.", cache.portfolioErr)
@@ -168,25 +205,31 @@ func (s *Scanner) ScanAccount(ctx context.Context, client *hostinger.Client, cac
 		dbByName[d.Name] = row
 	}
 
-	for _, site := range sites {
-		if site.Domain == "" {
-			continue
+	results := s.scanSites(ctx, client, ssh, cache, acc, todo)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	for _, r := range results {
+		snap.Warnings = append(snap.Warnings, r.warnings...)
+		w := r.website
+		for _, ref := range r.refs {
+			row, ok := dbByName[ref.Name]
+			if !ok {
+				row = &store.DatabaseRow{AccountID: acc.ID, Name: ref.Name, Host: ref.Host}
+				dbByName[ref.Name] = row
+				w.Notes = append(w.Notes, fmt.Sprintf("Database %s dirujuk %s tetapi tidak ada di daftar database API akun ini.", ref.Name, ref.Source))
+			}
+			row.WebsiteDomain = w.Domain
+			row.Source = ref.Source
+			if row.User == "" {
+				row.User = ref.User
+			}
+			if ref.Host != "" && ref.Host != "localhost" && ref.Host != "127.0.0.1" {
+				row.Host = ref.Host
+			}
 		}
-		w := s.scanWebsite(ctx, client, ssh, cache, acc, site, dbByName, warn)
 		snap.Websites = append(snap.Websites, w)
-		if order, ok := cache.mailOrders[strings.ToLower(site.Domain)]; ok && site.VhostType != "parked" {
-			boxes, err := client.ListMailboxes(ctx, order.ID)
-			if err != nil {
-				warn("Mailbox %s tidak terbaca: %v", site.Domain, err)
-				continue
-			}
-			for _, b := range boxes {
-				snap.Mailboxes = append(snap.Mailboxes, store.MailboxRow{
-					Domain: site.Domain, Address: b.Address, APIID: b.ID, OrderID: order.ID, Status: b.Status, IsCatchall: b.IsCatchall,
-					QuotaKB: b.Usage.StorageQuota, UsedKB: b.Usage.StorageUsed, MessageCount: b.Usage.MessagesUsed,
-				})
-			}
-		}
+		snap.Mailboxes = append(snap.Mailboxes, r.mailboxes...)
 	}
 	markIncluded(snap.Websites)
 	for _, d := range dbByName {
@@ -215,6 +258,73 @@ func (s *Scanner) ScanAccount(ctx context.Context, client *hostinger.Client, cac
 	return snap, nil
 }
 
+func (s *Scanner) report(p Progress) {
+	if s.Progress != nil {
+		s.Progress(p)
+	}
+}
+
+func (s *Scanner) scanSites(ctx context.Context, client *hostinger.Client, ssh *sshx.Client, cache *aliasCache, acc store.HostingAccount, sites []hostinger.Website) []siteResult {
+	results := make([]siteResult, len(sites))
+	workers := s.Parallel
+	if workers <= 0 {
+		workers = DefaultParallel
+	}
+	if workers > len(sites) {
+		workers = len(sites)
+	}
+	var mu sync.Mutex
+	done := 0
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for n := 0; n < workers; n++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				started := time.Now()
+				r := s.scanSite(ctx, client, ssh, cache, acc, sites[i])
+				results[i] = r
+				mu.Lock()
+				done++
+				s.report(Progress{AccountID: acc.ID, Stage: StageWebsite, Done: done, Total: len(sites), Domain: r.website.Domain, Type: r.website.SiteType, SizeBytes: r.website.SizeBytes, Elapsed: time.Since(started), Warnings: len(r.warnings)})
+				mu.Unlock()
+			}
+		}()
+	}
+	for i := range sites {
+		if ctx.Err() != nil {
+			break
+		}
+		jobs <- i
+	}
+	close(jobs)
+	wg.Wait()
+	return results
+}
+
+func (s *Scanner) scanSite(ctx context.Context, client *hostinger.Client, ssh *sshx.Client, cache *aliasCache, acc store.HostingAccount, site hostinger.Website) siteResult {
+	var r siteResult
+	warn := func(format string, args ...any) {
+		r.warnings = append(r.warnings, s.redactor().String(fmt.Sprintf(format, args...)))
+	}
+	r.website, r.refs = s.scanWebsite(ctx, client, ssh, cache, acc, site, warn)
+	if order, ok := cache.mailOrders[strings.ToLower(site.Domain)]; ok && site.VhostType != "parked" {
+		boxes, err := client.ListMailboxes(ctx, order.ID)
+		if err != nil {
+			warn("Mailbox %s tidak terbaca: %v", site.Domain, err)
+			return r
+		}
+		for _, b := range boxes {
+			r.mailboxes = append(r.mailboxes, store.MailboxRow{
+				Domain: site.Domain, Address: b.Address, APIID: b.ID, OrderID: order.ID, Status: b.Status, IsCatchall: b.IsCatchall,
+				QuotaKB: b.Usage.StorageQuota, UsedKB: b.Usage.StorageUsed, MessageCount: b.Usage.MessagesUsed,
+			})
+		}
+	}
+	return r
+}
+
 func unitPath(root string) string {
 	root = strings.TrimRight(root, "/")
 	if strings.HasSuffix(root, "/public_html") {
@@ -223,7 +333,7 @@ func unitPath(root string) string {
 	return root
 }
 
-func (s *Scanner) scanWebsite(ctx context.Context, client *hostinger.Client, ssh *sshx.Client, cache *aliasCache, acc store.HostingAccount, site hostinger.Website, dbs map[string]*store.DatabaseRow, warn func(string, ...any)) store.Website {
+func (s *Scanner) scanWebsite(ctx context.Context, client *hostinger.Client, ssh *sshx.Client, cache *aliasCache, acc store.HostingAccount, site hostinger.Website, warn func(string, ...any)) (store.Website, []detector.DBRef) {
 	w := store.Website{
 		AccountID:    acc.ID,
 		Domain:       site.Domain,
@@ -274,11 +384,14 @@ func (s *Scanner) scanWebsite(ctx context.Context, client *hostinger.Client, ssh
 		}
 	}
 	if site.VhostType == "parked" {
-		return w
+		return w, nil
 	}
 	in := detector.Input{APIType: site.WebsiteType, Files: map[string]string{}}
 	if ssh != nil && w.UnitPath != "" {
 		probe, err := s.probe(ctx, ssh, w.UnitPath)
+		if s.SkipSize && err == nil && !probe.missing {
+			w.Notes = append(w.Notes, "Ukuran dan jumlah file tidak dihitung (scan cepat).")
+		}
 		switch {
 		case err != nil:
 			warn("Probe SSH %s gagal: %v", site.Domain, err)
@@ -314,23 +427,7 @@ func (s *Scanner) scanWebsite(ctx context.Context, client *hostinger.Client, ssh
 	w.TypeConfidence = res.Confidence
 	w.Signals = res.Signals
 	w.Notes = append(w.Notes, res.Notes...)
-	for _, ref := range res.DBRefs {
-		row, ok := dbs[ref.Name]
-		if !ok {
-			row = &store.DatabaseRow{AccountID: acc.ID, Name: ref.Name, Host: ref.Host}
-			dbs[ref.Name] = row
-			w.Notes = append(w.Notes, fmt.Sprintf("Database %s dirujuk %s tetapi tidak ada di daftar database API akun ini.", ref.Name, ref.Source))
-		}
-		row.WebsiteDomain = site.Domain
-		row.Source = ref.Source
-		if row.User == "" {
-			row.User = ref.User
-		}
-		if ref.Host != "" && ref.Host != "localhost" && ref.Host != "127.0.0.1" {
-			row.Host = ref.Host
-		}
-	}
-	return w
+	return w, res.DBRefs
 }
 
 var hostingerNS = []string{"dns-parking.com", "hostinger."}
@@ -440,10 +537,20 @@ var probeFiles = []string{
 }
 
 func ProbeCommand(unit string) string {
+	return probeCommand(unit, true)
+}
+
+func QuickProbeCommand(unit string) string {
+	return probeCommand(unit, false)
+}
+
+func probeCommand(unit string, withSize bool) string {
 	var b strings.Builder
 	b.WriteString("cd " + sshx.ShellQuote(unit) + " 2>/dev/null || { echo 'ERR=tidak_ada'; exit 0; }; ")
-	b.WriteString(`printf 'SIZE=%s\n' "$(du -sb . 2>/dev/null | cut -f1)"; `)
-	b.WriteString(`printf 'FILES=%s\n' "$(find . -type f 2>/dev/null | wc -l)"; `)
+	if withSize {
+		b.WriteString(`if find . -maxdepth 0 -printf '' >/dev/null 2>&1; then find . -type f -printf '%s\n' 2>/dev/null | awk '{s+=$1} END {printf "SIZE=%.0f\nFILES=%d\n", s, NR}'; `)
+		b.WriteString(`else printf 'SIZE=%s\n' "$(du -sb . 2>/dev/null | cut -f1)"; printf 'FILES=%s\n' "$(find . -type f 2>/dev/null | wc -l)"; fi; `)
+	}
 	b.WriteString(`ls -1Ap . 2>/dev/null | sed 's|^|ROOT |'; `)
 	b.WriteString(`if [ -d public_html ]; then ls -1Ap public_html 2>/dev/null | sed 's|^|PUB |'; fi; `)
 	b.WriteString("for f in " + strings.Join(probeFiles, " ") + `; do if [ -f "$f" ]; then printf 'FILE %s\n' "$f"; head -c 65536 "$f" | base64 | tr -d '\n'; printf '\n'; fi; done`)
@@ -501,7 +608,11 @@ func (s *Scanner) probe(ctx context.Context, c *sshx.Client, unit string) (probe
 	}
 	pctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
-	res, err := c.Run(pctx, ProbeCommand(unit), nil)
+	cmd := ProbeCommand(unit)
+	if s.SkipSize {
+		cmd = QuickProbeCommand(unit)
+	}
+	res, err := c.Run(pctx, cmd, nil)
 	if err != nil {
 		return probeResult{}, err
 	}

@@ -15,7 +15,7 @@ func TestDefaultMatchesPRD(t *testing.T) {
 	if c.Storage.DataDir != "./data" || c.API.BaseURL != "https://developers.hostinger.com" {
 		t.Fatalf("default salah: %+v", c)
 	}
-	if c.API.TimeoutDetik != 60 || c.API.RatePerMenit != 60 || c.API.RetryMaks != 8 {
+	if c.API.TimeoutDetik != 60 || c.API.RatePerMenit != 80 || c.API.RateBurst != 5 || c.API.RetryMaks != 8 {
 		t.Fatalf("default api salah: %+v", c.API)
 	}
 	if c.Worker.WebsiteParalel != 2 || c.Worker.ImportDBParalelPerAkun != 1 {
@@ -34,7 +34,7 @@ func TestLoadMissingFileUsesDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.API.RatePerMenit != 60 {
+	if c.API.RatePerMenit != 80 {
 		t.Fatal("harus memakai default")
 	}
 }

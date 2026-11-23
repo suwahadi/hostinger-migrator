@@ -84,7 +84,7 @@ func (a *App) runWizard(ctx context.Context) error {
 			pause = false
 			actionErr = a.sshMenu(ctx)
 		case "3":
-			actionErr = a.runInventory(ctx, "", a.askRefresh())
+			actionErr = a.runInventory(ctx, "", a.askInventory())
 		case "4":
 			actionErr = a.runPlan(ctx, planOptions{})
 		case "5":
@@ -273,10 +273,16 @@ func (a *App) pickAccount(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-func (a *App) askRefresh() bool {
+func (a *App) askInventory() inventoryOptions {
+	var opt inventoryOptions
 	v, err := a.prompt.Line("Pindai ulang dari server? (y/T): ")
-	if err != nil {
-		return false
+	if err != nil || !strings.EqualFold(strings.TrimSpace(v), "y") {
+		return opt
 	}
-	return strings.EqualFold(strings.TrimSpace(v), "y")
+	opt.Refresh = true
+	v, err = a.prompt.Line("Scan cepat tanpa menghitung ukuran folder? Lebih cepat untuk website dengan banyak file. (y/T): ")
+	if err == nil && strings.EqualFold(strings.TrimSpace(v), "y") {
+		opt.Quick = true
+	}
+	return opt
 }

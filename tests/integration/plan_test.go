@@ -45,7 +45,17 @@ func sshServerFor(t *testing.T, user string) *sshtest.Server {
 			return sshtest.ExecResult{Stdout: "ok\n" + user + "\n/home/" + user + "\n"}
 		case strings.HasPrefix(cmd, "cd '"):
 			unit := strings.TrimPrefix(cmd, "cd '")
-			return sshtest.ExecResult{Stdout: probeFor(unit[:strings.Index(unit, "'")])}
+			out := probeFor(unit[:strings.Index(unit, "'")])
+			if !strings.Contains(cmd, "SIZE=") {
+				var keep []string
+				for _, line := range strings.Split(out, "\n") {
+					if !strings.HasPrefix(line, "SIZE=") && !strings.HasPrefix(line, "FILES=") {
+						keep = append(keep, line)
+					}
+				}
+				out = strings.Join(keep, "\n")
+			}
+			return sshtest.ExecResult{Stdout: out}
 		case strings.HasPrefix(cmd, "for c in"):
 			return sshtest.ExecResult{Stdout: "tar=ada\ngzip=ada\nmysqldump=ada\nmysql=ada\nsha256sum=ada\nwp=ada\n"}
 		case strings.HasPrefix(cmd, "df -P"):
@@ -119,6 +129,9 @@ func TestInventoryCommand(t *testing.T) {
 		"[EXPIRED]",
 		"Cron job: 1",
 		"PERINGATAN: SSH akun u597522494 berstatus BELUM_DIATUR",
+		"Akun u494983133: 2 website ditemukan, dipindai 2 sekaligus.",
+		"/2] domainanda.com  WordPress  1,2 GB",
+		"Pemindaian token xyz selesai dalam",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("inventaris tidak memuat %q", want)
@@ -134,6 +147,10 @@ func TestInventoryCommand(t *testing.T) {
 	h.run("", "inventory", "xyz", "--refresh")
 	if !strings.Contains(h.stdout.String(), "Memindai") {
 		t.Fatal("--refresh harus memindai ulang")
+	}
+	h.run("", "inventory", "xyz", "--refresh", "--cepat")
+	if quick := h.stdout.String(); !strings.Contains(quick, "scan cepat tanpa hitung ukuran") || !strings.Contains(quick, "WordPress · ? ·") {
+		t.Fatalf("--cepat harus melewati hitung ukuran:\n%s", quick)
 	}
 	if h.srv.Writes() != 0 {
 		t.Fatalf("inventaris mengirim %d request tulis", h.srv.Writes())

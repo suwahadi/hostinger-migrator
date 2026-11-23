@@ -161,7 +161,7 @@ func (a *App) open(ctx context.Context) error {
 	} else {
 		a.secrets = secrets.NewKeyring(a.redactor)
 	}
-	a.limiters = hostinger.NewLimiterPool(cfg.API.RatePerMenit)
+	a.limiters = hostinger.NewLimiterPoolWithBurst(cfg.API.RatePerMenit, cfg.API.RateBurst)
 	a.log.Debug("migrator dibuka", "versi", Version, "data_dir", a.dataDir)
 	return nil
 }

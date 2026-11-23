@@ -238,7 +238,7 @@ func TestInventoryTitleAndWarningColored(t *testing.T) {
 	out := &bytes.Buffer{}
 	a := newApp(Env{Stdout: out, Stderr: &bytes.Buffer{}})
 	a.store, a.colorOut = st, true
-	if err := a.runInventory(ctx, "xyz", false); err != nil {
+	if err := a.runInventory(ctx, "xyz", inventoryOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"\x1b[1;94mINVENTARIS — token xyz\x1b[0m", "\x1b[93m    PERINGATAN: domain mati.com expired\x1b[0m"} {
@@ -276,5 +276,21 @@ func TestPickRollbackInvalidChoiceYellow(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "\x1b[93mPilihan tidak dikenal.\x1b[0m") {
 		t.Fatal(out.String())
+	}
+}
+
+func TestAskInventoryOptions(t *testing.T) {
+	cases := map[string]inventoryOptions{
+		"\n":     {},
+		"y\n\n":  {Refresh: true},
+		"y\ny\n": {Refresh: true, Quick: true},
+		"t\ny\n": {},
+		"Y\nY\n": {Refresh: true, Quick: true},
+	}
+	for in, want := range cases {
+		a := newApp(Env{Stdin: strings.NewReader(in), Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
+		if got := a.askInventory(); got != want {
+			t.Errorf("input %q = %+v, harus %+v", in, got, want)
+		}
 	}
 }

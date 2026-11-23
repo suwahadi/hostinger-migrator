@@ -9,8 +9,10 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -318,5 +320,103 @@ func TestMarkIncluded(t *testing.T) {
 	markIncluded(ws)
 	if ws[1].IncludedIn != "a.com" || ws[0].IncludedIn != "" || ws[2].IncludedIn != "" || ws[1].IsUnit() {
 		t.Fatalf("ws = %+v", ws)
+	}
+}
+
+func TestScanReportsProgressInParallel(t *testing.T) {
+	f := newFixture(t)
+	var mu sync.Mutex
+	var events []Progress
+	f.scanner.Parallel = 3
+	f.scanner.Progress = func(p Progress) {
+		mu.Lock()
+		events = append(events, p)
+		mu.Unlock()
+	}
+	if _, err := f.scanner.ScanAlias(context.Background(), "xyz"); err != nil {
+		t.Fatal(err)
+	}
+	accounts, sites := 0, map[string]bool{}
+	last := map[string]int{}
+	for _, e := range events {
+		switch e.Stage {
+		case StageAccount:
+			accounts++
+		case StageWebsite:
+			if e.Done != last[e.AccountID]+1 || e.Done > e.Total {
+				t.Fatalf("urutan progres salah: %+v", e)
+			}
+			last[e.AccountID] = e.Done
+			sites[e.Domain] = true
+		}
+	}
+	if accounts != 2 || !sites["domainanda.com"] || !sites["toko.id"] {
+		t.Fatalf("progres = %+v", events)
+	}
+}
+
+func TestScanQuickSkipsSize(t *testing.T) {
+	f := newFixture(t)
+	var mu sync.Mutex
+	var cmds []string
+	inner := f.ssh.Exec
+	f.ssh.Exec = func(cmd string, env map[string]string) sshtest.ExecResult {
+		mu.Lock()
+		cmds = append(cmds, cmd)
+		mu.Unlock()
+		res := inner(cmd, env)
+		if strings.HasPrefix(cmd, "cd '") {
+			var keep []string
+			for _, line := range strings.Split(res.Stdout, "\n") {
+				if !strings.HasPrefix(line, "SIZE=") && !strings.HasPrefix(line, "FILES=") {
+					keep = append(keep, line)
+				}
+			}
+			res.Stdout = strings.Join(keep, "\n")
+		}
+		return res
+	}
+	f.scanner.SkipSize = true
+	ctx := context.Background()
+	if _, err := f.scanner.ScanAlias(ctx, "xyz"); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cmds {
+		if strings.HasPrefix(c, "cd '") && (strings.Contains(c, "SIZE=") || strings.Contains(c, "du -sb")) {
+			t.Fatalf("scan cepat tidak boleh menghitung ukuran: %s", c)
+		}
+	}
+	ws, _ := f.st.ListWebsites(ctx, "u494983133")
+	wp := find(ws, "domainanda.com")
+	if wp.SiteType != "WordPress" || wp.SizeBytes != store.UnknownQuantity || !strings.Contains(strings.Join(wp.Notes, " "), "scan cepat") {
+		t.Fatalf("wp = %+v", wp)
+	}
+}
+
+func TestProbeCommandRealShell(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash tidak tersedia")
+	}
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "public_html", "wp-content"), 0o755)
+	os.WriteFile(filepath.Join(dir, "public_html", "index.php"), []byte("12345"), 0o644)
+	os.WriteFile(filepath.Join(dir, "public_html", "wp-content", "a.txt"), []byte("1234567890"), 0o644)
+	os.WriteFile(filepath.Join(dir, "public_html", "wp-config.php"), []byte("<?php define('DB_NAME', 'x');"), 0o644)
+	out, err := exec.Command("bash", "-c", ProbeCommand(dir)).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := ParseProbe(string(out))
+	if err != nil || r.size != int64(5+10+len("<?php define('DB_NAME', 'x');")) || r.files != 3 || r.content["public_html/wp-config.php"] == "" {
+		t.Fatalf("r = %+v %v\n%s", r, err, out)
+	}
+	out, _ = exec.Command("bash", "-c", QuickProbeCommand(dir)).Output()
+	q, _ := ParseProbe(string(out))
+	if q.size != -1 || q.files != -1 || len(q.public) == 0 {
+		t.Fatalf("q = %+v", q)
+	}
+	out, _ = exec.Command("bash", "-c", ProbeCommand(filepath.Join(dir, "tidak-ada"))).Output()
+	if m, _ := ParseProbe(string(out)); !m.missing {
+		t.Fatal("folder hilang harus terdeteksi")
 	}
 }

@@ -236,7 +236,7 @@ func TestDefaultConfigCreatedOnFirstRun(t *testing.T) {
 	os.Remove(h.config)
 	h.run("", "account", "list")
 	data, err := os.ReadFile(h.config)
-	if err != nil || !strings.Contains(string(data), "rate_per_menit: 60") {
+	if err != nil || !strings.Contains(string(data), "rate_per_menit: 80") {
 		t.Fatalf("config bawaan tidak dibuat: %v", err)
 	}
 	if strings.Contains(strings.ToLower(string(data)), "token:") {
