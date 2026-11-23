@@ -28,6 +28,8 @@ Persiapan: satu akun uji **Single** dan satu akun uji **Premium/Business** (sumb
 | B6 | `inventory --refresh --cepat` di akun yang sama | Lebih cepat, ukuran `?`, tipe sama dengan scan penuh | |
 | B7 | Tutup jendela di tengah `inventory --refresh` (token dengan 2 akun atau lebih), buka lagi, menu 3 jawab `T` | Hanya akun yang belum selesai dipindai | |
 | B8 | `inventory --akun uXXX` | Hanya akun itu yang dipindai | |
+| B9 | Menu 4 dengan token berisi ratusan website: cari sebagian domain, pilih nomor, cari id akun lalu `A` | Hasil sesuai kata kunci, maksimal 30 baris, `Terpilih (...)` benar | |
+| B10 | Layar akun tujuan, menu 3, dan menu 2 SSH dengan lebih dari 20 akun: cari sebagian id akun atau domain | Daftar penuh tidak tampil, hasil pencarian benar, akun tujuan tampil lebih cepat | |
 
 ## C. Backup, Provisioning, Restore, Verifikasi (Fase 4)
 

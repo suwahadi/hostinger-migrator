@@ -2,7 +2,7 @@
 
 Alat baris perintah (CLI) untuk memindahkan website beserta layanan terkait — file, database, DNS, SSL, dan email — dari satu akun Hostinger Shared Hosting ke akun Hostinger lain secara otomatis, aman, bisa dilanjutkan setelah gangguan, dan menghasilkan laporan lengkap dalam bahasa Indonesia.
 
-> **Status: v1.0.0-rc6.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
+> **Status: v1.0.0-rc7.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
 
 ---
 
@@ -37,7 +37,7 @@ Tampilan awal wizard:
 
  Nama Program : Hostinger Migrator
  Pembuat      : Suwahadi
- Versi        : 1.0.0-rc6
+ Versi        : 1.0.0-rc7
  Platform     : Windows 10/11 64bit
 
 ==================================
@@ -79,7 +79,7 @@ Kolom **Menu** adalah nomor di wizard; kolom **Perintah** untuk yang lebih suka 
 | 3 | Audit kapabilitas | Menu 2 → 4 · `migrator audit` | Read-only. `SUPPORTED` hanya untuk yang teruji nyata |
 | 4 | Inventaris | Menu 3 · `migrator inventory` | Root path, tipe, ukuran, database, mailbox, status domain |
 | 5 | Rencana (uji dulu) | `migrator plan --dry-run` | Semua pemeriksaan + urutan langkah, tanpa mengubah apa pun |
-| 6 | Rencana (simpan) | Menu 4 · `migrator plan` | Ketik `LANJUT` (bila ada peringatan) lalu `YAKIN`; worker langsung berjalan di background |
+| 6 | Rencana (simpan) | Menu 4 · `migrator plan` | Di isian `Cari:` ketik sebagian domain atau id akun, lalu pilih nomor dari hasil (`A` = semua hasil yang tampil). Domain lengkap dipisah koma langsung terpilih. ENTER kosong = selesai memilih. Ketik `LANJUT` (bila ada peringatan) lalu `YAKIN`; worker langsung berjalan di background |
 | 7 | Pantau & konfirmasi | Menu 5, Menu 6 · `migrator status`, `migrator pending`, `migrator confirm <KODE> <domain>` | Di Menu 6 cukup pilih nomor tindakan yang sudah dikerjakan |
 | 8 | Cutover domain | Menu 7 · `migrator cutover` | Ketik `CUTOVER`; Anda akan diminta mengganti domain sumber ke domain sementara di hPanel |
 | 9 | Pindah email | Menu 8 · `migrator email` | Ketik `HAPUS EMAIL`; password mailbox baru: `migrator email passwords` |
@@ -206,7 +206,9 @@ Pemindaian inventaris:
 |---|---|
 | Menu 3, "Pindai ulang: T" / `migrator inventory` | Hanya akun yang belum punya inventaris (misalnya setelah pemindaian terputus). Akun yang sudah selesai dilewati. Bila semua sudah ada, hasil tersimpan langsung ditampilkan. |
 | Menu 3, "Pindai ulang: y", akun ENTER / `--refresh` | Semua akun di semua token, dari awal. |
-| Menu 3, "Pindai ulang: y", pilih nomor akun / `--akun uXXX` | Satu akun hosting saja. |
+| Menu 3, "Pindai ulang: y", pilih akun (nomor, id, atau cari dengan sebagian id/domain) / `--akun uXXX` | Satu akun hosting saja. |
+
+Di semua layar pilih akun (akun tujuan, menu 3, menu 2 SSH), daftar lengkap hanya tampil bila akunnya 20 atau kurang. Bila lebih, ketik sebagian id akun atau domain untuk mencari, lalu pilih nomor dari hasil. Hasil pencarian tampil paling banyak 30 baris.
 
 Inventaris belum mendeteksi perubahan per website: akun yang dipindai ulang selalu dipindai penuh.
 
@@ -235,7 +237,7 @@ Butuh Go 1.26+.
 go vet ./...
 go test ./...
 go test -race ./...
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc6" -o dist/migrator.exe ./cmd/migrator
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc7" -o dist/migrator.exe ./cmd/migrator
 ```
 
 Pengujian memakai server tiruan in-process: API Hostinger, SSH yang menjalankan perintah shell sungguhan dengan `mysql`/`mysqldump` tiruan, HTTP, dan IMAP (`tests/`).
