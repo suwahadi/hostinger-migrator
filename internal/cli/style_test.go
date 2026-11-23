@@ -175,3 +175,106 @@ func TestAccountListOneAccountPerLine(t *testing.T) {
 		t.Error("kolom status harus rata")
 	}
 }
+
+func TestStartupWarningVisibleAfterClear(t *testing.T) {
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "OneDrive")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	out := &bytes.Buffer{}
+	a := newApp(Env{Stdin: strings.NewReader("0\n"), Stdout: out, Stderr: out})
+	a.configPath = filepath.Join(dir, "config.yaml")
+	a.wizardMode, a.interactive, a.colorOut = true, true, true
+	if err := a.open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer a.close()
+	if err := a.runWizard(ctx); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	warn := strings.Index(s, "sinkronisasi cloud")
+	if warn < 0 || strings.LastIndex(s, ansiClear) > warn {
+		t.Fatalf("peringatan cloud-sync harus tampil setelah layar dibersihkan:\n%q", s)
+	}
+}
+
+func openTestStore(t *testing.T) *store.Store {
+	t.Helper()
+	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "m.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	return st
+}
+
+func addTestAccount(t *testing.T, st *store.Store, alias, account string) {
+	t.Helper()
+	ctx := context.Background()
+	tx, err := st.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.InsertCredential(ctx, tx, alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ReplaceHostingAccounts(ctx, tx, alias, []store.HostingAccount{{ID: account, Alias: alias, Plan: "hostinger_premium"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInventoryTitleAndWarningColored(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	addTestAccount(t, st, "xyz", "u111")
+	if err := st.SaveInventory(ctx, &store.InventorySnapshot{AccountID: "u111", Alias: "xyz", Warnings: []string{"domain mati.com expired"}}); err != nil {
+		t.Fatal(err)
+	}
+	out := &bytes.Buffer{}
+	a := newApp(Env{Stdout: out, Stderr: &bytes.Buffer{}})
+	a.store, a.colorOut = st, true
+	if err := a.runInventory(ctx, "xyz", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"\x1b[1;94mINVENTARIS — token xyz\x1b[0m", "\x1b[93m    PERINGATAN: domain mati.com expired\x1b[0m"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("tidak memuat %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestChooseAliasInvalidChoiceYellow(t *testing.T) {
+	st := openTestStore(t)
+	addTestAccount(t, st, "xyz", "u111")
+	out := &bytes.Buffer{}
+	a := newApp(Env{Stdin: strings.NewReader("zz\n"), Stdout: out, Stderr: &bytes.Buffer{}})
+	a.store, a.colorOut = st, true
+	if _, err := a.chooseAlias(context.Background(), "sumber"); !errors.Is(err, ErrInputClosed) {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "\x1b[93mPilihan tidak dikenal.\x1b[0m") {
+		t.Fatal(out.String())
+	}
+}
+
+func TestPickRollbackInvalidChoiceYellow(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	if _, err := st.CreateBatch(ctx, store.Batch{SourceAlias: "a", SourceAccount: "u1", DestAlias: "b", DestAccount: "u2"}, []store.Item{{SourceDomain: "a.com", State: "CUTOVER_DONE"}}); err != nil {
+		t.Fatal(err)
+	}
+	out := &bytes.Buffer{}
+	a := newApp(Env{Stdin: strings.NewReader("9\n"), Stdout: out, Stderr: &bytes.Buffer{}})
+	a.store, a.colorOut = st, true
+	if d, err := a.pickRollback(ctx); err != nil || d != "" {
+		t.Fatal(d, err)
+	}
+	if !strings.Contains(out.String(), "\x1b[93mPilihan tidak dikenal.\x1b[0m") {
+		t.Fatal(out.String())
+	}
+}

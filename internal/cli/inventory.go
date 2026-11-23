@@ -120,7 +120,8 @@ func (a *App) runInventory(ctx context.Context, alias string, refresh bool) erro
 			}
 			return err
 		}
-		a.printf("\nINVENTARIS — token %s\n", al)
+		a.println()
+		a.say(toneTitle, "INVENTARIS — token "+al)
 		if err := a.printAliasInventory(ctx, al, true); err != nil {
 			return err
 		}
@@ -304,7 +305,7 @@ func (a *App) printAccountInventory(ctx context.Context, n int, la listedAccount
 	if run, err := a.store.GetInventoryRun(ctx, acc.ID, acc.Alias); err == nil {
 		a.printf("    Dipindai: %s · file JSON: %s\n", run.FinishedAt, run.JSONPath)
 		for _, w := range run.Warnings {
-			a.printf("    PERINGATAN: %s\n", a.redactor.String(w))
+			a.say(toneWarn, "    PERINGATAN: "+a.redactor.String(w))
 		}
 	}
 }

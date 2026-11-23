@@ -97,6 +97,12 @@ func (a *App) printError(msg string) {
 	fmt.Fprintln(a.env.Stderr, paint(a.colorErr, toneDanger, "ERROR: "+a.redactor.String(msg)))
 }
 
+func (a *App) printStartupWarning() {
+	if a.startupWarn != "" {
+		fmt.Fprintln(a.env.Stderr, paint(a.colorErr, toneWarn, a.startupWarn))
+	}
+}
+
 func (a *App) clearScreen() {
 	if a.interactive {
 		fmt.Fprint(a.env.Stdout, ansiClear)

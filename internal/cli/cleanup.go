@@ -99,7 +99,8 @@ func (a *App) runCleanup(ctx context.Context, batchID string, includeDummy bool,
 				held = append(held, chk)
 			}
 		}
-		a.printf("\nCLEANUP batch %s (%s/%s)\n", b.ID, b.SourceAlias, b.SourceAccount)
+		a.println()
+		a.say(toneTitle, fmt.Sprintf("CLEANUP batch %s (%s/%s)", b.ID, b.SourceAlias, b.SourceAccount))
 		if len(pass)+len(dummies) > 0 {
 			a.say(toneDanger, "Lolos gerbang (website + database di akun sumber akan DIHAPUS, domain tidak dihapus):")
 			for _, it := range append(pass, dummies...) {

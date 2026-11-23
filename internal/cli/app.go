@@ -64,6 +64,7 @@ type App struct {
 	colorOut    bool
 	colorErr    bool
 	interactive bool
+	startupWarn string
 }
 
 type exitError struct {
@@ -132,8 +133,9 @@ func (a *App) open(ctx context.Context) error {
 	if err := os.MkdirAll(a.dataDir, 0o700); err != nil {
 		return fmt.Errorf("gagal membuat folder data %s: %w", a.dataDir, err)
 	}
-	if warn := config.CloudSyncWarning(a.dataDir); warn != "" {
-		fmt.Fprintln(a.env.Stderr, paint(a.colorErr, toneWarn, warn))
+	a.startupWarn = config.CloudSyncWarning(a.dataDir)
+	if !a.wizardMode || !a.interactive {
+		a.printStartupWarning()
 	}
 	logger, closeLog, err := logx.New(logx.Options{
 		Dir:           filepath.Join(a.dataDir, "logs"),

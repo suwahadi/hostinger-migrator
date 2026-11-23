@@ -54,6 +54,9 @@ func (a *App) banner() {
 func (a *App) runWizard(ctx context.Context) error {
 	a.clearScreen()
 	a.banner()
+	if a.interactive {
+		a.printStartupWarning()
+	}
 	for {
 		a.println()
 		a.say(toneTitle, "MENU UTAMA — HOSTINGER MIGRATION MANAGER")

@@ -79,7 +79,7 @@ func (a *App) chooseAlias(ctx context.Context, role string) (string, error) {
 				return c.Alias, nil
 			}
 		}
-		a.println("Pilihan tidak dikenal.")
+		a.say(toneWarn, "Pilihan tidak dikenal.")
 	}
 }
 
@@ -381,7 +381,7 @@ func (a *App) chooseDestAccount(ctx context.Context, alias, sourceAccount string
 				return acc.ID, nil
 			}
 		}
-		a.println("Pilihan tidak dikenal.")
+		a.say(toneWarn, "Pilihan tidak dikenal.")
 	}
 }
 

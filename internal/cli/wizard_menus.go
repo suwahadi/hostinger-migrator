@@ -281,7 +281,7 @@ func (a *App) pickRollback(ctx context.Context) (string, error) {
 	n, convErr := strconv.Atoi(strings.TrimSpace(v))
 	if convErr != nil || n < 1 || n > len(options) {
 		if strings.TrimSpace(v) != "" {
-			a.println("Pilihan tidak dikenal.")
+			a.say(toneWarn, "Pilihan tidak dikenal.")
 		}
 		return "", nil
 	}
