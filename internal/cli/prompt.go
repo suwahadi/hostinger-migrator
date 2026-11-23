@@ -19,6 +19,7 @@ type Prompter struct {
 	errOut     io.Writer
 	readSecret func() (string, error)
 	warned     bool
+	errColor   bool
 }
 
 func NewPrompter(in io.Reader, out, errOut io.Writer, readSecret func() (string, error)) *Prompter {
@@ -50,8 +51,8 @@ func (p *Prompter) Secret(prompt string) (string, error) {
 	}
 	if !p.warned {
 		fmt.Fprintln(p.errOut)
-		fmt.Fprintln(p.errOut, "PERINGATAN: terminal ini tidak mendukung input tersembunyi, token akan terlihat saat diketik.")
-		fmt.Fprintln(p.errOut, "Untuk menyembunyikannya di Git Bash, jalankan: winpty ./migrator.exe")
+		fmt.Fprintln(p.errOut, paint(p.errColor, toneWarn, "PERINGATAN: terminal ini tidak mendukung input tersembunyi, token akan terlihat saat diketik."))
+		fmt.Fprintln(p.errOut, paint(p.errColor, toneWarn, "Untuk menyembunyikannya di Git Bash, jalankan: winpty ./migrator.exe"))
 		fmt.Fprint(p.out, prompt)
 		p.warned = true
 	}

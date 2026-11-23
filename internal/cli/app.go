@@ -59,8 +59,11 @@ type App struct {
 	limiters   *hostinger.LimiterPool
 	prompt     *Prompter
 	redactor   *logx.Redactor
-	lookupNS   func(ctx context.Context, domain string) ([]string, error)
-	wizardMode bool
+	lookupNS    func(ctx context.Context, domain string) ([]string, error)
+	wizardMode  bool
+	colorOut    bool
+	colorErr    bool
+	interactive bool
 }
 
 type exitError struct {
@@ -88,12 +91,17 @@ func newApp(env Env) *App {
 	if env.Redactor == nil {
 		env.Redactor = logx.Global
 	}
-	return &App{
+	a := &App{
 		env:      env,
 		redactor: env.Redactor,
 		prompt:   NewPrompter(env.Stdin, env.Stdout, env.Stderr, env.ReadSecret),
 		lookupNS: env.LookupNS,
+		colorOut: isTerminal(env.Stdout),
+		colorErr: isTerminal(env.Stderr),
 	}
+	a.interactive = a.colorOut && isTerminal(env.Stdin)
+	a.prompt.errColor = a.colorErr
+	return a
 }
 
 func (a *App) out() io.Writer { return a.env.Stdout }
@@ -125,7 +133,7 @@ func (a *App) open(ctx context.Context) error {
 		return fmt.Errorf("gagal membuat folder data %s: %w", a.dataDir, err)
 	}
 	if warn := config.CloudSyncWarning(a.dataDir); warn != "" {
-		fmt.Fprintln(a.env.Stderr, warn)
+		fmt.Fprintln(a.env.Stderr, paint(a.colorErr, toneWarn, warn))
 	}
 	logger, closeLog, err := logx.New(logx.Options{
 		Dir:           filepath.Join(a.dataDir, "logs"),
