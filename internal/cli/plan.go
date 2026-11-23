@@ -125,10 +125,11 @@ func (a *App) runPlan(ctx context.Context, o planOptions) error {
 			return needsAction(err)
 		}
 	} else {
-		a.printf("\nDitemukan %d akun di token %s:\n\n", len(listed), o.sourceAlias)
-		for i, la := range listed {
-			a.printAccountInventory(ctx, i+1, la, false)
+		total := 0
+		for _, la := range listed {
+			total += len(la.Units)
 		}
+		a.printf("\nToken %s: %d akun, %d website.\n", o.sourceAlias, len(listed), total)
 		o.sourceAccount, domains, err = a.selectWebsites(listed, o.sourceAccount)
 		if err != nil {
 			return err
@@ -259,85 +260,102 @@ func (a *App) selectWebsites(listed []listedAccount, presetAccount string) (stri
 	selected := map[string]bool{}
 	var order []string
 	account := presetAccount
+	add := func(hits []websiteHit) {
+		mixed := false
+		for _, h := range hits {
+			if account == "" {
+				account = h.Account
+			}
+			if h.Account != account {
+				mixed = true
+				continue
+			}
+			if !selected[h.Site.Domain] {
+				selected[h.Site.Domain] = true
+				order = append(order, h.Site.Domain)
+			}
+		}
+		if mixed {
+			a.say(toneWarn, fmt.Sprintf("Satu batch hanya untuk satu akun sumber (%s). Pilihan dari akun lain diabaikan.", account))
+		}
+		if len(order) > 0 {
+			a.say(toneOK, fmt.Sprintf("Terpilih (%s): %s", account, strings.Join(order, ", ")))
+		}
+	}
+	a.println("Ketik sebagian domain atau id akun. ENTER = selesai.")
 	for {
-		v, err := a.prompt.Line("\nPilih: [nomor akun.nomor web, pisah koma] / [A] semua / [ENTER] lanjut: ")
+		v, err := a.prompt.Line("\nCari: ")
 		if err != nil {
 			return "", nil, err
 		}
 		v = strings.TrimSpace(v)
 		if v == "" {
 			if len(order) == 0 {
-				a.println("Belum ada website dipilih.")
+				a.say(toneWarn, "Belum ada website dipilih.")
 				continue
 			}
 			return account, order, nil
 		}
-		var picks []struct{ acc, web int }
-		bad := ""
-		upper := strings.ToUpper(v)
-		if strings.HasPrefix(upper, "A") {
-			n := 1
-			if rest := strings.TrimSpace(upper[1:]); rest != "" {
-				x, err := strconv.Atoi(rest)
-				if err != nil {
-					bad = v
-				}
-				n = x
-			} else if len(listed) > 1 {
-				a.println("Token memiliki lebih dari satu akun; ketik A<nomor akun>, contoh A1.")
-				continue
+		if hits, missing, exact := exactWebsites(listed, v); exact {
+			for _, m := range missing {
+				a.say(toneWarn, fmt.Sprintf("Domain %q tidak ditemukan.", m))
 			}
-			if bad == "" {
-				if n < 1 || n > len(listed) {
-					bad = v
-				} else {
-					for j := range listed[n-1].Units {
-						picks = append(picks, struct{ acc, web int }{n, j + 1})
-					}
-				}
-			}
-		} else {
-			for _, part := range strings.Split(v, ",") {
-				part = strings.TrimSpace(part)
-				x, y, ok := strings.Cut(part, ".")
-				ai, e1 := strconv.Atoi(x)
-				wi, e2 := strconv.Atoi(y)
-				if !ok || e1 != nil || e2 != nil || ai < 1 || ai > len(listed) || wi < 1 || wi > len(listed[ai-1].Units) {
-					bad = part
-					break
-				}
-				picks = append(picks, struct{ acc, web int }{ai, wi})
-			}
-		}
-		if bad != "" {
-			a.printf("Pilihan %q tidak valid.\n", bad)
+			add(hits)
 			continue
 		}
-		mixed := false
-		for _, p := range picks {
-			id := listed[p.acc-1].Account.ID
-			if account == "" {
-				account = id
-			}
-			if id != account {
-				mixed = true
-			}
+		hits := matchWebsites(listed, v)
+		if len(hits) == 0 {
+			a.say(toneWarn, fmt.Sprintf("Tidak ada website yang cocok dengan %q.", v))
+			continue
 		}
-		if mixed {
-			a.printf("Satu batch hanya untuk satu akun sumber (%s). Pilihan dari akun lain diabaikan.\n", account)
+		shown := hits[:min(len(hits), maxResults)]
+		width := 0
+		for _, h := range shown {
+			width = max(width, len(h.Site.Domain))
 		}
-		for _, p := range picks {
-			la := listed[p.acc-1]
-			if la.Account.ID != account {
-				continue
-			}
-			d := la.Units[p.web-1].Domain
-			if !selected[d] {
-				selected[d] = true
-				order = append(order, d)
-			}
+		a.printf("Hasil %q (%d):\n", v, len(hits))
+		for i, h := range shown {
+			a.printf("%2d. %s  %-*s  %s · %s%s\n", i+1, h.Account, width, h.Site.Domain, typeLabel(h.Site), sizeLabel(h.Site.SizeBytes), flags(h.Site))
 		}
-		a.printf("Terpilih (%s): %s\n", account, strings.Join(order, ", "))
+		if len(hits) > len(shown) {
+			a.say(toneWarn, fmt.Sprintf("Menampilkan %d dari %d. Persempit kata kunci.", len(shown), len(hits)))
+		}
+		picks, err := a.pickHits(shown)
+		if err != nil {
+			return "", nil, err
+		}
+		add(picks)
+	}
+}
+
+func (a *App) pickHits(shown []websiteHit) ([]websiteHit, error) {
+	for {
+		v, err := a.prompt.Line("Pilih nomor (pisah koma), A = semua hasil, ENTER = cari lagi: ")
+		if err != nil {
+			return nil, err
+		}
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return nil, nil
+		}
+		if strings.EqualFold(v, "A") {
+			return shown, nil
+		}
+		var picks []websiteHit
+		bad := ""
+		for _, part := range strings.Split(v, ",") {
+			part = strings.TrimSpace(part)
+			n, err := strconv.Atoi(part)
+			if err != nil || n < 1 || n > len(shown) {
+				bad = part
+				break
+			}
+			picks = append(picks, shown[n-1])
+		}
+		if bad == "" {
+			return picks, nil
+		}
+		a.say(toneWarn, fmt.Sprintf("Pilihan %q tidak valid.", bad))
 	}
 }
 
