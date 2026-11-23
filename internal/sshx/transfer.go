@@ -129,7 +129,7 @@ func (c *Client) RemoteSHA256(ctx context.Context, remotePath string) (string, e
 	if len(f) == 0 {
 		return "", errors.New("output sha256sum kosong")
 	}
-	return f[0], nil
+	return strings.TrimPrefix(f[0], `\`), nil
 }
 
 func (c *Client) RemoteSize(remotePath string) (int64, error) {

@@ -2,7 +2,7 @@
 
 Alat baris perintah (CLI) untuk memindahkan website beserta layanan terkait — file, database, DNS, SSL, dan email — dari satu akun Hostinger Shared Hosting ke akun Hostinger lain secara otomatis, aman, bisa dilanjutkan setelah gangguan, dan menghasilkan laporan lengkap dalam bahasa Indonesia.
 
-> **Status: v1.0.0-rc2.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
+> **Status: v1.0.0-rc3.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
 
 ---
 
@@ -37,7 +37,7 @@ Tampilan awal wizard:
 
  Nama Program : Hostinger Migrator
  Pembuat      : Suwahadi
- Versi        : 1.0.0-rc2
+ Versi        : 1.0.0-rc3
  Platform     : Windows 10/11 64bit
 
 ==================================
@@ -218,10 +218,12 @@ Butuh Go 1.26+.
 go vet ./...
 go test ./...
 go test -race ./...
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc2" -o dist/migrator.exe ./cmd/migrator
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc3" -o dist/migrator.exe ./cmd/migrator
 ```
 
 Pengujian memakai server tiruan in-process: API Hostinger, SSH yang menjalankan perintah shell sungguhan dengan `mysql`/`mysqldump` tiruan, HTTP, dan IMAP (`tests/`).
+
+`go test ./...` lengkap harus dijalankan di **Linux/macOS** (atau container Linux). Di Windows, server SSH tiruan meneruskan path `C:\...` ke bash sehingga test pipeline, cutover, email, worker, cleanup, dan integrasi gagal. Kode produksi tidak terpengaruh (D-050).
 
 ## 12. Dokumen Terkait
 

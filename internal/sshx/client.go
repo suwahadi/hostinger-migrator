@@ -211,6 +211,8 @@ const (
 	CauseOther          = "GAGAL"
 )
 
+const windowsConnRefused = syscall.Errno(10061)
+
 func Classify(err error) (cause, message string) {
 	var hk *HostKeyChangedError
 	switch {
@@ -220,7 +222,7 @@ func Classify(err error) (cause, message string) {
 		return CauseHostKeyChanged, "Fingerprint server SSH berubah sejak terakhir terhubung. Bisa jadi server dipindah Hostinger, atau ada penyadapan. Periksa di hPanel, lalu jalankan 'migrator ssh setup <akun> --terima-host-baru' bila yakin aman."
 	case strings.Contains(err.Error(), "unable to authenticate"), strings.Contains(err.Error(), "no supported methods remain"):
 		return CauseAuth, "Login SSH ditolak. Kemungkinan public key belum ditempel/salah tempel di hPanel, username salah, atau password salah."
-	case errors.Is(err, syscall.ECONNREFUSED), strings.Contains(err.Error(), "connection refused"):
+	case errors.Is(err, syscall.ECONNREFUSED), errors.Is(err, windowsConnRefused), strings.Contains(err.Error(), "connection refused"):
 		return CauseRefused, "Koneksi ditolak. Kemungkinan SSH belum diaktifkan di hPanel atau port salah."
 	}
 	var dnsErr *net.DNSError
