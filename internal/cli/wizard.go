@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -39,7 +38,7 @@ func center(s string) string {
 func (a *App) banner() {
 	line := strings.Repeat("=", bannerWidth)
 	a.println(line)
-	a.println(center("INFORMASI PROGRAM"))
+	a.say(toneTitle, center("INFORMASI PROGRAM"))
 	a.println(line)
 	a.println()
 	a.println(" Nama Program : Hostinger Migrator")
@@ -53,10 +52,11 @@ func (a *App) banner() {
 }
 
 func (a *App) runWizard(ctx context.Context) error {
+	a.clearScreen()
 	a.banner()
 	for {
 		a.println()
-		a.println("MENU UTAMA — HOSTINGER MIGRATION MANAGER")
+		a.say(toneTitle, "MENU UTAMA — HOSTINGER MIGRATION MANAGER")
 		for _, m := range mainMenu {
 			a.printf("%2s. %s\n", m.key, m.label)
 		}
@@ -65,14 +65,20 @@ func (a *App) runWizard(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		var actionErr error
-		switch strings.TrimSpace(choice) {
-		case "0":
+		choice = strings.TrimSpace(choice)
+		if choice == "0" {
 			a.println("Sampai jumpa. Worker yang sedang berjalan tetap bekerja di background.")
 			return nil
+		}
+		a.clearScreen()
+		var actionErr error
+		pause := true
+		switch choice {
 		case "1":
+			pause = false
 			actionErr = a.tokenMenu(ctx)
 		case "2":
+			pause = false
 			actionErr = a.sshMenu(ctx)
 		case "3":
 			actionErr = a.runInventory(ctx, "", a.askRefresh())
@@ -81,30 +87,34 @@ func (a *App) runWizard(ctx context.Context) error {
 		case "5":
 			actionErr = a.showStatus(ctx, "", "")
 		case "6":
+			pause = false
 			actionErr = a.manualMenu(ctx)
 		case "7":
 			actionErr = a.runCutover(ctx, "", "")
 		case "8":
+			pause = false
 			actionErr = a.emailMenu(ctx)
 		case "9":
 			actionErr = a.cleanupWizard(ctx)
 		case "10":
 			actionErr = a.runReport(ctx, "", map[string]bool{"html": true, "json": true, "csv": true})
 		case "11":
+			pause = false
 			actionErr = a.workerMenu(ctx)
 		default:
-			a.println("Pilihan tidak dikenal.")
+			a.say(toneWarn, "Pilihan tidak dikenal.")
 		}
-		if err := a.wizardAction(actionErr); err != nil {
+		if err := a.finish(actionErr, pause); err != nil {
 			return err
 		}
+		a.clearScreen()
 	}
 }
 
 func (a *App) tokenMenu(ctx context.Context) error {
 	for {
 		a.println()
-		a.println("KELOLA API TOKEN")
+		a.say(toneTitle, "KELOLA API TOKEN")
 		a.println("1. Tambah token")
 		a.println("2. Daftar token")
 		a.println("3. Tes token")
@@ -114,10 +124,13 @@ func (a *App) tokenMenu(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		var actionErr error
-		switch strings.TrimSpace(choice) {
-		case "0":
+		choice = strings.TrimSpace(choice)
+		if choice == "0" {
 			return nil
+		}
+		a.clearScreen()
+		var actionErr error
+		switch choice {
 		case "1":
 			actionErr = a.accountAdd(ctx, "", false)
 		case "2":
@@ -139,14 +152,12 @@ func (a *App) tokenMenu(ctx context.Context) error {
 				actionErr = a.accountRemove(ctx, alias, false)
 			}
 		default:
-			a.println("Pilihan tidak dikenal.")
+			a.say(toneWarn, "Pilihan tidak dikenal.")
 		}
-		if actionErr != nil {
-			if errors.Is(actionErr, ErrInputClosed) {
-				return actionErr
-			}
-			fmt.Fprintln(a.env.Stderr, "ERROR: "+a.redactor.String(actionErr.Error()))
+		if err := a.finish(actionErr, true); err != nil {
+			return err
 		}
+		a.clearScreen()
 	}
 }
 
@@ -181,7 +192,7 @@ func (a *App) pickAlias(ctx context.Context, prompt string) (string, error) {
 func (a *App) sshMenu(ctx context.Context) error {
 	for {
 		a.println()
-		a.println("SIAPKAN SSH KEY & AUDIT")
+		a.say(toneTitle, "SIAPKAN SSH KEY & AUDIT")
 		a.println("1. Setup SSH semua akun yang belum siap")
 		a.println("2. Setup SSH satu akun")
 		a.println("3. Tes SSH semua akun")
@@ -192,10 +203,13 @@ func (a *App) sshMenu(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		var actionErr error
-		switch strings.TrimSpace(choice) {
-		case "0":
+		choice = strings.TrimSpace(choice)
+		if choice == "0" {
 			return nil
+		}
+		a.clearScreen()
+		var actionErr error
+		switch choice {
 		case "1":
 			actionErr = a.sshSetup(ctx, "", false)
 		case "2":
@@ -219,14 +233,12 @@ func (a *App) sshMenu(ctx context.Context) error {
 				actionErr = a.sshRemovePassword(ctx, id)
 			}
 		default:
-			a.println("Pilihan tidak dikenal.")
+			a.say(toneWarn, "Pilihan tidak dikenal.")
 		}
-		if actionErr != nil {
-			if errors.Is(actionErr, ErrInputClosed) {
-				return actionErr
-			}
-			fmt.Fprintln(a.env.Stderr, "ERROR: "+a.redactor.String(actionErr.Error()))
+		if err := a.finish(actionErr, true); err != nil {
+			return err
 		}
+		a.clearScreen()
 	}
 }
 
@@ -264,15 +276,4 @@ func (a *App) askRefresh() bool {
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(v), "y")
-}
-
-func (a *App) wizardAction(err error) error {
-	if err == nil {
-		return nil
-	}
-	if errors.Is(err, ErrInputClosed) {
-		return err
-	}
-	fmt.Fprintln(a.env.Stderr, "ERROR: "+a.redactor.String(err.Error()))
-	return nil
 }

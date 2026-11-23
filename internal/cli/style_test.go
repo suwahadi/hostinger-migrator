@@ -2,13 +2,17 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 	"text/tabwriter"
+
+	"hostinger-migrator/internal/store"
 )
 
 func TestPaintOffForNonTerminal(t *testing.T) {
@@ -80,5 +84,63 @@ func TestFinishPausesOnSubmenuError(t *testing.T) {
 	}
 	if err := a.finish(nil, false); err != nil {
 		t.Fatal("tanpa error dan tanpa jeda tidak boleh membaca input")
+	}
+}
+
+func TestWizardInvalidChoiceInteractive(t *testing.T) {
+	out := &bytes.Buffer{}
+	a := newApp(Env{Stdin: strings.NewReader("x\n\n0\n"), Stdout: out, Stderr: &bytes.Buffer{}})
+	a.interactive, a.colorOut = true, true
+	if err := a.runWizard(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if strings.Count(s, "\x1b[H\x1b[2J\x1b[3J") < 3 {
+		t.Fatal("layar harus dibersihkan di awal, setelah pilihan, dan setelah jeda")
+	}
+	for _, want := range []string{"Tekan ENTER untuk kembali ke menu.", "\x1b[93mPilihan tidak dikenal.\x1b[0m", "\x1b[1;94mMENU UTAMA"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("tidak memuat %q", want)
+		}
+	}
+}
+
+func TestWizardPipedInputHasNoClearOrPause(t *testing.T) {
+	out := &bytes.Buffer{}
+	a := newApp(Env{Stdin: strings.NewReader("x\n0\n"), Stdout: out, Stderr: &bytes.Buffer{}})
+	if err := a.runWizard(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "\x1b[") || strings.Contains(out.String(), "Tekan ENTER untuk kembali ke menu.") {
+		t.Fatal(out.String())
+	}
+}
+
+func TestPauseEOFEndsWizard(t *testing.T) {
+	a := newApp(Env{Stdin: strings.NewReader("x\n"), Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
+	a.interactive = true
+	if err := a.runWizard(context.Background()); !errors.Is(err, ErrInputClosed) {
+		t.Fatal(err)
+	}
+}
+
+func TestManualMenuEmptyPauses(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "m.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	out := &bytes.Buffer{}
+	a := newApp(Env{Stdin: strings.NewReader("\n"), Stdout: out, Stderr: &bytes.Buffer{}})
+	a.store = st
+	a.interactive = true
+	if err := a.manualMenu(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Tidak ada tindakan manual yang menunggu.", "Tekan ENTER untuk kembali ke menu."} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("tidak memuat %q", want)
+		}
 	}
 }

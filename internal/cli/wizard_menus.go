@@ -17,16 +17,23 @@ var needsValue = map[string]string{
 }
 
 func (a *App) manualMenu(ctx context.Context) error {
+	next := func(err error) error {
+		if err := a.finish(err, true); err != nil {
+			return err
+		}
+		a.clearScreen()
+		return nil
+	}
 	for {
 		tasks, err := a.store.ListManualTasks(ctx, true)
 		if err != nil {
 			return err
 		}
 		a.println()
-		a.println("TINDAKAN MANUAL")
+		a.say(toneTitle, "TINDAKAN MANUAL")
 		if len(tasks) == 0 {
 			a.println("Tidak ada tindakan manual yang menunggu.")
-			return nil
+			return a.pause()
 		}
 		for i, t := range tasks {
 			a.printf("\n[%d] %s · %s (batch %s) · sejak %s\n", i+1, t.Code, t.Domain, t.BatchID, t.CreatedAt)
@@ -47,11 +54,17 @@ func (a *App) manualMenu(ctx context.Context) error {
 		}
 		if strings.EqualFold(v, "R") {
 			a.showSecretsFor(ctx, tasks)
+			if err := next(nil); err != nil {
+				return err
+			}
 			continue
 		}
 		n, convErr := strconv.Atoi(v)
 		if convErr != nil || n < 1 || n > len(tasks) {
-			a.println("Pilihan tidak dikenal.")
+			a.say(toneWarn, "Pilihan tidak dikenal.")
+			if err := next(nil); err != nil {
+				return err
+			}
 			continue
 		}
 		t := tasks[n-1]
@@ -62,21 +75,29 @@ func (a *App) manualMenu(ctx context.Context) error {
 				return err
 			}
 		}
-		ok, err := a.prompt.Confirm(fmt.Sprintf("Yakin %s untuk %s sudah selesai dikerjakan? (y/T): ", t.Code, t.Domain), "y")
+		ok, err := a.prompt.Confirm(a.color(toneOK, fmt.Sprintf("Yakin %s untuk %s sudah selesai dikerjakan? (y/T): ", t.Code, t.Domain)), "y")
 		if err != nil {
 			return err
 		}
 		if !ok {
 			a.println("Dibatalkan.")
+			if err := next(nil); err != nil {
+				return err
+			}
 			continue
 		}
 		it, err := pipeline.Confirm(ctx, a.store, t.Code, t.Domain, t.BatchID, value)
 		if err != nil {
-			fmt.Fprintln(a.env.Stderr, "ERROR: "+a.redactor.String(err.Error()))
+			if err := next(err); err != nil {
+				return err
+			}
 			continue
 		}
-		a.printf("%s untuk %s dikonfirmasi (status %s).\n", t.Code, t.Domain, pipeline.ItemLabel(it))
+		a.say(toneOK, fmt.Sprintf("%s untuk %s dikonfirmasi (status %s).", t.Code, t.Domain, pipeline.ItemLabel(it)))
 		if err := a.startWorker(ctx, false); err != nil {
+			return err
+		}
+		if err := next(nil); err != nil {
 			return err
 		}
 	}
@@ -121,7 +142,7 @@ func (a *App) showSecretsFor(ctx context.Context, tasks []*store.ManualTask) {
 func (a *App) emailMenu(ctx context.Context) error {
 	for {
 		a.println()
-		a.println("PINDAHKAN EMAIL")
+		a.say(toneTitle, "PINDAHKAN EMAIL")
 		a.println("1. Setujui pemindahan email (website yang sudah cutover)")
 		a.println("2. Tampilkan password mailbox baru")
 		a.println("0. Kembali")
@@ -129,20 +150,24 @@ func (a *App) emailMenu(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		var actionErr error
-		switch strings.TrimSpace(v) {
-		case "0", "":
+		v = strings.TrimSpace(v)
+		if v == "0" || v == "" {
 			return nil
+		}
+		a.clearScreen()
+		var actionErr error
+		switch v {
 		case "1":
 			actionErr = a.approveEmail(ctx, "")
 		case "2":
 			actionErr = a.showMailPasswords(ctx, "", "")
 		default:
-			a.println("Pilihan tidak dikenal.")
+			a.say(toneWarn, "Pilihan tidak dikenal.")
 		}
-		if err := a.wizardAction(actionErr); err != nil {
+		if err := a.finish(actionErr, true); err != nil {
 			return err
 		}
+		a.clearScreen()
 	}
 }
 
@@ -162,7 +187,7 @@ func (a *App) cleanupWizard(ctx context.Context) error {
 func (a *App) workerMenu(ctx context.Context) error {
 	for {
 		a.println()
-		a.println("KENDALI WORKER & PEMULIHAN")
+		a.say(toneTitle, "KENDALI WORKER & PEMULIHAN")
 		a.println("1. Jalankan worker (start)")
 		a.println("2. Lanjutkan setelah gangguan (resume)")
 		a.println("3. Hentikan worker (stop)")
@@ -175,10 +200,13 @@ func (a *App) workerMenu(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		var actionErr error
-		switch strings.TrimSpace(v) {
-		case "0", "":
+		v = strings.TrimSpace(v)
+		if v == "0" || v == "" {
 			return nil
+		}
+		a.clearScreen()
+		var actionErr error
+		switch v {
 		case "1":
 			actionErr = a.startWorker(ctx, false)
 		case "2":
@@ -214,11 +242,12 @@ func (a *App) workerMenu(ctx context.Context) error {
 		case "7":
 			actionErr = a.autostart("off")
 		default:
-			a.println("Pilihan tidak dikenal.")
+			a.say(toneWarn, "Pilihan tidak dikenal.")
 		}
-		if err := a.wizardAction(actionErr); err != nil {
+		if err := a.finish(actionErr, true); err != nil {
 			return err
 		}
+		a.clearScreen()
 	}
 }
 
