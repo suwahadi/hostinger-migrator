@@ -48,17 +48,17 @@ type Env struct {
 }
 
 type App struct {
-	env        Env
-	configPath string
-	dataDir    string
-	cfg        *config.Config
-	store      *store.Store
-	secrets    *secrets.Store
-	log        *slog.Logger
-	closeLog   func() error
-	limiters   *hostinger.LimiterPool
-	prompt     *Prompter
-	redactor   *logx.Redactor
+	env         Env
+	configPath  string
+	dataDir     string
+	cfg         *config.Config
+	store       *store.Store
+	secrets     *secrets.Store
+	log         *slog.Logger
+	closeLog    func() error
+	limiters    *hostinger.LimiterPool
+	prompt      *Prompter
+	redactor    *logx.Redactor
 	lookupNS    func(ctx context.Context, domain string) ([]string, error)
 	wizardMode  bool
 	colorOut    bool
