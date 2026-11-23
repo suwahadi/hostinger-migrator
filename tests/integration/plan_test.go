@@ -159,6 +159,58 @@ func TestInventoryCommand(t *testing.T) {
 	h.assertNoLeak(goodToken, out)
 }
 
+func TestInventoryResumeAndSingleAccount(t *testing.T) {
+	h := newPlanHarness(t, "hostinger_business")
+	if code := h.run("", "inventory", "xyz"); code != cli.ExitOK {
+		t.Fatalf("inventory: %s%s", h.stdout.String(), h.stderr.String())
+	}
+	st, err := store.Open(context.Background(), filepath.Join(h.dir, "data", "migrator.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB().Exec(`DELETE FROM inventory_runs WHERE account_id = ?`, "u597522494"); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	if code := h.run("", "inventory", "xyz"); code != cli.ExitOK {
+		t.Fatalf("lanjutan: %s%s", h.stdout.String(), h.stderr.String())
+	}
+	out := h.stdout.String()
+	if !strings.Contains(out, "Melanjutkan inventaris token xyz (read-only): 1 akun belum dipindai, 1 akun sudah ada dan dilewati (u494983133).") {
+		t.Fatalf("pesan lanjutan tidak tampil:\n%s", out)
+	}
+	if strings.Contains(out, "Akun u494983133:") || !strings.Contains(out, "Akun u597522494: 1 website ditemukan") {
+		t.Fatalf("akun yang sudah dipindai tidak boleh diulang:\n%s", out)
+	}
+	if !strings.Contains(out, "[1] u494983133") || !strings.Contains(out, "[2] u597522494") {
+		t.Fatalf("inventaris lengkap harus tetap tampil:\n%s", out)
+	}
+
+	h.run("", "inventory", "xyz")
+	if strings.Contains(h.stdout.String(), "Memindai") || strings.Contains(h.stdout.String(), "Melanjutkan") {
+		t.Fatal("setelah lengkap tidak boleh memindai lagi")
+	}
+
+	if code := h.run("", "inventory", "--akun", "u494983133"); code != cli.ExitOK {
+		t.Fatalf("--akun: %s%s", h.stdout.String(), h.stderr.String())
+	}
+	out = h.stdout.String()
+	if !strings.Contains(out, "Memindai ulang akun u494983133 dari token xyz (read-only)") || !strings.Contains(out, "Akun u494983133: 2 website ditemukan") || strings.Contains(out, "Akun u597522494:") {
+		t.Fatalf("--akun harus memindai satu akun saja:\n%s", out)
+	}
+	if strings.Contains(out, "INVENTARIS — token zyx") {
+		t.Fatalf("--akun hanya menampilkan token pemilik akun:\n%s", out)
+	}
+
+	if code := h.run("", "inventory", "--akun", "u000"); code != cli.ExitAction || !strings.Contains(h.stderr.String(), "akun hosting u000 tidak terdaftar") {
+		t.Fatalf("akun tidak dikenal harus ditolak (%d): %s", code, h.stderr.String())
+	}
+	if h.srv.Writes() != 0 {
+		t.Fatalf("inventaris mengirim %d request tulis", h.srv.Writes())
+	}
+}
+
 func TestPlanDryRunRejectedWhenQuotaInsufficient(t *testing.T) {
 	h := newPlanHarness(t, "hostinger_single")
 	code := h.run("", "plan", "--dry-run", "--sumber", "xyz", "--web", "domainanda.com,toko.id", "--tujuan", "zyx", "--akun-tujuan", "u73839202")

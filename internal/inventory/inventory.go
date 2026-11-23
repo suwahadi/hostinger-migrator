@@ -81,12 +81,32 @@ func (s *Scanner) redactor() *logx.Redactor {
 }
 
 func (s *Scanner) ScanAlias(ctx context.Context, alias string) ([]*store.InventorySnapshot, error) {
-	accounts, err := s.Store.ListHostingAccounts(ctx, alias)
+	return s.ScanAccounts(ctx, alias, nil)
+}
+
+func (s *Scanner) ScanAccounts(ctx context.Context, alias string, only []string) ([]*store.InventorySnapshot, error) {
+	all, err := s.Store.ListHostingAccounts(ctx, alias)
 	if err != nil {
 		return nil, err
 	}
-	if len(accounts) == 0 {
+	if len(all) == 0 {
 		return nil, fmt.Errorf("token %s belum memiliki akun hosting tercatat; jalankan 'migrator account test %s'", alias, alias)
+	}
+	accounts := all
+	if len(only) > 0 {
+		want := map[string]bool{}
+		for _, id := range only {
+			want[id] = true
+		}
+		accounts = nil
+		for _, acc := range all {
+			if want[acc.ID] {
+				accounts = append(accounts, acc)
+			}
+		}
+		if len(accounts) != len(want) {
+			return nil, fmt.Errorf("sebagian akun yang diminta tidak terdaftar di token %s: %s", alias, strings.Join(only, ", "))
+		}
 	}
 	client, err := s.NewClient(alias)
 	if err != nil {

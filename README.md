@@ -2,7 +2,7 @@
 
 Alat baris perintah (CLI) untuk memindahkan website beserta layanan terkait — file, database, DNS, SSL, dan email — dari satu akun Hostinger Shared Hosting ke akun Hostinger lain secara otomatis, aman, bisa dilanjutkan setelah gangguan, dan menghasilkan laporan lengkap dalam bahasa Indonesia.
 
-> **Status: v1.0.0-rc5.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
+> **Status: v1.0.0-rc6.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
 
 ---
 
@@ -37,7 +37,7 @@ Tampilan awal wizard:
 
  Nama Program : Hostinger Migrator
  Pembuat      : Suwahadi
- Versi        : 1.0.0-rc5
+ Versi        : 1.0.0-rc6
  Platform     : Windows 10/11 64bit
 
 ==================================
@@ -141,7 +141,7 @@ migrator account add|list|test|remove     kelola API token
 migrator ssh setup|test [akun]            siapkan/uji SSH
 migrator ssh remove-password <akun>       hapus password SSH cadangan
 migrator audit [alias]                    audit kapabilitas (read-only)
-migrator inventory [alias] [--refresh] [--cepat]    inventaris (read-only); --cepat tanpa hitung ukuran folder
+migrator inventory [alias] [--refresh] [--cepat] [--akun uXXX]    inventaris (read-only); --cepat tanpa hitung ukuran folder; --akun pindai ulang satu akun
 migrator plan [--dry-run]                 buat rencana batch
 migrator start | stop | status | resume   kendali worker background
 migrator status --item <domain>           detail satu website
@@ -198,7 +198,17 @@ email:
 
 Batas API: Hostinger mengizinkan 90 panggilan per 60 detik per token. `rate_per_menit: 80` ditambah `rate_burst: 5` menjaga jumlah panggilan di bawah 85 per menit. `config.yaml` yang dibuat versi sebelum `1.0.0-rc5` masih berisi `rate_per_menit: 60`; ubah ke `80` agar lebih cepat (atau hapus `config.yaml` supaya dibuat ulang).
 
-Inventaris memindai 4 website sekaligus per akun dan menampilkan kemajuan per website (`[3/20] domain  tipe  ukuran  durasi`). Bila website memiliki sangat banyak file, pilih scan cepat (menu 3, jawab `y` dua kali, atau `--cepat`): ukuran folder dan jumlah file tidak dihitung, tipe website tetap dideteksi.
+Inventaris memindai 4 website sekaligus per akun dan menampilkan kemajuan per website (`[3/20] domain  tipe  ukuran  durasi`). Bila website memiliki sangat banyak file, pilih scan cepat (menu 3 lalu jawab `y` pada pertanyaan scan cepat, atau `--cepat`): ukuran folder dan jumlah file tidak dihitung, tipe website tetap dideteksi.
+
+Pemindaian inventaris:
+
+| Cara | Yang dipindai |
+|---|---|
+| Menu 3, "Pindai ulang: T" / `migrator inventory` | Hanya akun yang belum punya inventaris (misalnya setelah pemindaian terputus). Akun yang sudah selesai dilewati. Bila semua sudah ada, hasil tersimpan langsung ditampilkan. |
+| Menu 3, "Pindai ulang: y", akun ENTER / `--refresh` | Semua akun di semua token, dari awal. |
+| Menu 3, "Pindai ulang: y", pilih nomor akun / `--akun uXXX` | Satu akun hosting saja. |
+
+Inventaris belum mendeteksi perubahan per website: akun yang dipindai ulang selalu dipindai penuh.
 
 Token dan password tidak pernah ada di file ini.
 
@@ -225,7 +235,7 @@ Butuh Go 1.26+.
 go vet ./...
 go test ./...
 go test -race ./...
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc5" -o dist/migrator.exe ./cmd/migrator
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc6" -o dist/migrator.exe ./cmd/migrator
 ```
 
 Pengujian memakai server tiruan in-process: API Hostinger, SSH yang menjalankan perintah shell sungguhan dengan `mysql`/`mysqldump` tiruan, HTTP, dan IMAP (`tests/`).

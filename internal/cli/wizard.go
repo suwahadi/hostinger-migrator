@@ -84,7 +84,7 @@ func (a *App) runWizard(ctx context.Context) error {
 			pause = false
 			actionErr = a.sshMenu(ctx)
 		case "3":
-			actionErr = a.runInventory(ctx, "", a.askInventory())
+			actionErr = a.inventoryWizard(ctx)
 		case "4":
 			actionErr = a.runPlan(ctx, planOptions{})
 		case "5":
@@ -273,16 +273,53 @@ func (a *App) pickAccount(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-func (a *App) askInventory() inventoryOptions {
+func (a *App) inventoryWizard(ctx context.Context) error {
+	opt, ok, err := a.askInventory(ctx)
+	if err != nil || !ok {
+		return err
+	}
+	return a.runInventory(ctx, "", opt)
+}
+
+func (a *App) askInventory(ctx context.Context) (inventoryOptions, bool, error) {
 	var opt inventoryOptions
 	v, err := a.prompt.Line("Pindai ulang dari server? (y/T): ")
-	if err != nil || !strings.EqualFold(strings.TrimSpace(v), "y") {
-		return opt
+	if err != nil {
+		return opt, false, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(v), "y") {
+		return opt, true, nil
 	}
 	opt.Refresh = true
-	v, err = a.prompt.Line("Scan cepat tanpa menghitung ukuran folder? Lebih cepat untuk website dengan banyak file. (y/T): ")
-	if err == nil && strings.EqualFold(strings.TrimSpace(v), "y") {
-		opt.Quick = true
+	accs, err := a.store.ListHostingAccounts(ctx, "")
+	if err != nil {
+		return opt, false, err
 	}
-	return opt
+	if len(accs) > 1 {
+		for i, acc := range accs {
+			a.printf("%d. %s (%s, token %s)\n", i+1, acc.ID, PlanLabel(acc.Plan), acc.Alias)
+		}
+		v, err := a.prompt.Line("Akun yang dipindai ulang (nomor atau id, ENTER = semua): ")
+		if err != nil {
+			return opt, false, err
+		}
+		v = strings.TrimSpace(v)
+		if v != "" {
+			for i, acc := range accs {
+				if v == fmt.Sprint(i+1) || v == acc.ID {
+					opt.Account = acc.ID
+				}
+			}
+			if opt.Account == "" {
+				a.say(toneWarn, "Akun tidak ditemukan. Pemindaian dibatalkan.")
+				return opt, false, nil
+			}
+		}
+	}
+	v, err = a.prompt.Line("Scan cepat tanpa menghitung ukuran folder? Lebih cepat untuk website dengan banyak file. (y/T): ")
+	if err != nil {
+		return opt, false, err
+	}
+	opt.Quick = strings.EqualFold(strings.TrimSpace(v), "y")
+	return opt, true, nil
 }

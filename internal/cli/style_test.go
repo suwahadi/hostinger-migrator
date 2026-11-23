@@ -280,17 +280,33 @@ func TestPickRollbackInvalidChoiceYellow(t *testing.T) {
 }
 
 func TestAskInventoryOptions(t *testing.T) {
-	cases := map[string]inventoryOptions{
-		"\n":     {},
-		"y\n\n":  {Refresh: true},
-		"y\ny\n": {Refresh: true, Quick: true},
-		"t\ny\n": {},
-		"Y\nY\n": {Refresh: true, Quick: true},
+	ctx := context.Background()
+	st := openTestStore(t)
+	addTestAccount(t, st, "xyz", "u111")
+	addTestAccount(t, st, "abc", "u222")
+	type want struct {
+		opt inventoryOptions
+		ok  bool
 	}
-	for in, want := range cases {
-		a := newApp(Env{Stdin: strings.NewReader(in), Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
-		if got := a.askInventory(); got != want {
-			t.Errorf("input %q = %+v, harus %+v", in, got, want)
+	cases := map[string]want{
+		"\n":          {inventoryOptions{}, true},
+		"t\ny\n":      {inventoryOptions{}, true},
+		"y\n\n\n":     {inventoryOptions{Refresh: true}, true},
+		"y\n\ny\n":    {inventoryOptions{Refresh: true, Quick: true}, true},
+		"Y\n2\nY\n":   {inventoryOptions{Refresh: true, Account: "u111", Quick: true}, true},
+		"y\nu111\n\n": {inventoryOptions{Refresh: true, Account: "u111"}, true},
+		"y\nu999\n":   {inventoryOptions{Refresh: true}, false},
+	}
+	for in, w := range cases {
+		out := &bytes.Buffer{}
+		a := newApp(Env{Stdin: strings.NewReader(in), Stdout: out, Stderr: &bytes.Buffer{}})
+		a.store = st
+		got, ok, err := a.askInventory(ctx)
+		if err != nil || got != w.opt || ok != w.ok {
+			t.Errorf("input %q = %+v %v %v, harus %+v %v", in, got, ok, err, w.opt, w.ok)
+		}
+		if strings.HasPrefix(strings.ToLower(in), "y") && !strings.Contains(out.String(), "2. u111") {
+			t.Errorf("daftar akun tidak tampil: %s", out.String())
 		}
 	}
 }

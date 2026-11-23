@@ -26,6 +26,8 @@ Persiapan: satu akun uji **Single** dan satu akun uji **Premium/Business** (sumb
 | B4 | Cocokkan kuota paket di `config.yaml` dengan hPanel | Sesuaikan bila berbeda | |
 | B5 | `inventory --refresh` dengan `rate_per_menit: 80`: catat durasi total dan cari `batas rate API tercapai` di `data/logs/*.log` | Progres per website tampil; tidak ada atau jarang 429 | |
 | B6 | `inventory --refresh --cepat` di akun yang sama | Lebih cepat, ukuran `?`, tipe sama dengan scan penuh | |
+| B7 | Tutup jendela di tengah `inventory --refresh` (token dengan 2 akun atau lebih), buka lagi, menu 3 jawab `T` | Hanya akun yang belum selesai dipindai | |
+| B8 | `inventory --akun uXXX` | Hanya akun itu yang dipindai | |
 
 ## C. Backup, Provisioning, Restore, Verifikasi (Fase 4)
 

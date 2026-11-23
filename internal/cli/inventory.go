@@ -34,6 +34,7 @@ func newInventoryCmd(app *App) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&opt.Refresh, "refresh", false, "pindai ulang walaupun inventaris sudah ada")
 	cmd.Flags().BoolVar(&opt.Quick, "cepat", false, "scan cepat: ukuran folder dan jumlah file tidak dihitung")
+	cmd.Flags().StringVar(&opt.Account, "akun", "", "pindai ulang satu akun hosting saja (mis. u123456789)")
 	return cmd
 }
 
@@ -83,6 +84,7 @@ func (a *App) aliases(ctx context.Context, alias string) ([]string, error) {
 type inventoryOptions struct {
 	Refresh bool
 	Quick   bool
+	Account string
 }
 
 func (a *App) inventoryProgress(p inventory.Progress) {
@@ -108,25 +110,48 @@ func (a *App) ensureInventory(ctx context.Context, alias string, opt inventoryOp
 	if err != nil {
 		return err
 	}
-	need := opt.Refresh
+	var targets, done []string
 	for _, acc := range accs {
-		if _, err := a.store.GetInventoryRun(ctx, acc.ID, alias); errors.Is(err, store.ErrNotFound) {
-			need = true
+		switch {
+		case opt.Account != "":
+			if acc.ID == opt.Account {
+				targets = append(targets, acc.ID)
+			}
+		case opt.Refresh:
+			targets = append(targets, acc.ID)
+		default:
+			if _, err := a.store.GetInventoryRun(ctx, acc.ID, alias); errors.Is(err, store.ErrNotFound) {
+				targets = append(targets, acc.ID)
+			} else {
+				done = append(done, acc.ID)
+			}
 		}
 	}
-	if !need {
+	if len(targets) == 0 && (len(accs) > 0 || !opt.Refresh) {
 		return nil
 	}
 	mode := ""
 	if opt.Quick {
 		mode = ", scan cepat tanpa hitung ukuran"
 	}
-	a.printf("Memindai inventaris token %s (read-only%s)...\n", alias, mode)
+	switch {
+	case len(accs) == 0:
+		a.printf("Memindai inventaris token %s (read-only%s)...\n", alias, mode)
+	case len(done) > 0:
+		a.printf("Melanjutkan inventaris token %s (read-only%s): %d akun belum dipindai, %d akun sudah ada dan dilewati (%s).\n", alias, mode, len(targets), len(done), strings.Join(done, ", "))
+	case len(targets) < len(accs):
+		a.printf("Memindai ulang akun %s dari token %s (read-only%s)...\n", strings.Join(targets, ", "), alias, mode)
+	default:
+		a.printf("Memindai inventaris token %s (read-only%s)...\n", alias, mode)
+	}
 	started := time.Now()
 	sc := a.scanner()
 	sc.SkipSize = opt.Quick
 	sc.Progress = a.inventoryProgress
-	_, err = sc.ScanAlias(ctx, alias)
+	if len(targets) == len(accs) {
+		targets = nil
+	}
+	_, err = sc.ScanAccounts(ctx, alias, targets)
 	if err == nil {
 		a.say(toneOK, fmt.Sprintf("Pemindaian token %s selesai dalam %s.", alias, time.Since(started).Round(time.Second)))
 	}
@@ -144,6 +169,13 @@ func (a *App) runInventory(ctx context.Context, alias string, opt inventoryOptio
 	aliases, err := a.aliases(ctx, alias)
 	if err != nil {
 		return err
+	}
+	if opt.Account != "" {
+		owner, err := a.accountAlias(ctx, alias, opt.Account)
+		if err != nil {
+			return err
+		}
+		aliases = []string{owner}
 	}
 	var failed []error
 	for _, al := range aliases {
@@ -168,6 +200,22 @@ func (a *App) runInventory(ctx context.Context, alias string, opt inventoryOptio
 		return needsAction(errors.Join(failed...))
 	}
 	return nil
+}
+
+func (a *App) accountAlias(ctx context.Context, alias, accountID string) (string, error) {
+	accs, err := a.store.ListHostingAccounts(ctx, alias)
+	if err != nil {
+		return "", err
+	}
+	for _, acc := range accs {
+		if acc.ID == accountID {
+			return acc.Alias, nil
+		}
+	}
+	if alias != "" {
+		return "", needsAction(fmt.Errorf("akun hosting %s tidak terdaftar di token %s; lihat 'migrator account list'", accountID, alias))
+	}
+	return "", needsAction(fmt.Errorf("akun hosting %s tidak terdaftar; lihat 'migrator account list'", accountID))
 }
 
 type listedAccount struct {
