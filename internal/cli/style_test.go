@@ -289,13 +289,13 @@ func TestAskInventoryOptions(t *testing.T) {
 		ok  bool
 	}
 	cases := map[string]want{
-		"\n":          {inventoryOptions{}, true},
-		"t\ny\n":      {inventoryOptions{}, true},
-		"y\n\n\n":     {inventoryOptions{Refresh: true}, true},
-		"y\n\ny\n":    {inventoryOptions{Refresh: true, Quick: true}, true},
-		"Y\n2\nY\n":   {inventoryOptions{Refresh: true, Account: "u111", Quick: true}, true},
-		"y\nu111\n\n": {inventoryOptions{Refresh: true, Account: "u111"}, true},
-		"y\nu999\n":   {inventoryOptions{Refresh: true}, false},
+		"\n":            {inventoryOptions{}, true},
+		"t\ny\n":        {inventoryOptions{}, true},
+		"y\n\n\n":       {inventoryOptions{Refresh: true}, true},
+		"y\n\ny\n":      {inventoryOptions{Refresh: true, Quick: true}, true},
+		"Y\n2\nY\n":     {inventoryOptions{Refresh: true, Account: "u111", Quick: true}, true},
+		"y\nu111\n\n":   {inventoryOptions{Refresh: true, Account: "u111"}, true},
+		"y\nu999\n\n\n": {inventoryOptions{Refresh: true}, true},
 	}
 	for in, w := range cases {
 		out := &bytes.Buffer{}
@@ -307,6 +307,9 @@ func TestAskInventoryOptions(t *testing.T) {
 		}
 		if strings.HasPrefix(strings.ToLower(in), "y") && !strings.Contains(out.String(), "2. u111") {
 			t.Errorf("daftar akun tidak tampil: %s", out.String())
+		}
+		if strings.Contains(in, "u999") && !strings.Contains(out.String(), `Tidak ada akun yang cocok dengan "u999".`) {
+			t.Errorf("id tidak dikenal harus memicu pencarian: %s", out.String())
 		}
 	}
 }

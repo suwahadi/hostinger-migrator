@@ -95,3 +95,73 @@ func TestSelectWebsitesCapsResults(t *testing.T) {
 		t.Fatalf("%d domain\n%s", len(domains), out.String())
 	}
 }
+
+func manyAccounts(n int) []accountChoice {
+	var items []accountChoice
+	for i := 0; i < n; i++ {
+		items = append(items, accountChoice{ID: fmt.Sprintf("u%d", 100+i), Domains: []string{fmt.Sprintf("site%d.com", 100+i)}})
+	}
+	return items
+}
+
+func TestMatchAccounts(t *testing.T) {
+	items := []accountChoice{{ID: "u111", Domains: []string{"toko.id"}}, {ID: "u222", Domains: []string{"kedai.id"}}}
+	if got := matchAccounts(items, "TOKO"); len(got) != 1 || got[0].ID != "u111" {
+		t.Errorf("TOKO: %v", got)
+	}
+	if got := matchAccounts(items, "u22"); len(got) != 1 || got[0].ID != "u222" {
+		t.Errorf("u22: %v", got)
+	}
+}
+
+func TestChooseAccountSmallListByNumberAndId(t *testing.T) {
+	items := []accountChoice{{ID: "u111"}, {ID: "u222"}, {ID: "u333"}}
+	describe := func(id string) string { return "(Premium)" }
+	for in, want := range map[string]string{"2\n": "u222", "u333\n": "u333"} {
+		out := &bytes.Buffer{}
+		a := newApp(Env{Stdin: strings.NewReader(in), Stdout: out, Stderr: &bytes.Buffer{}})
+		got, err := a.chooseAccountFrom(items, "Pilih akun: ", false, describe)
+		if err != nil || got != want {
+			t.Fatalf("%q: %q %v", in, got, err)
+		}
+		for _, row := range []string{" 1. u111  (Premium)", " 2. u222  (Premium)", " 3. u333  (Premium)"} {
+			if !strings.Contains(out.String(), row) {
+				t.Errorf("tidak memuat %q\n%s", row, out.String())
+			}
+		}
+	}
+}
+
+func TestChooseAccountDescribesOnlyShown(t *testing.T) {
+	calls := 0
+	describe := func(id string) string { calls++; return "(Business)" }
+	out := &bytes.Buffer{}
+	a := newApp(Env{Stdin: strings.NewReader("site107\n1\n"), Stdout: out, Stderr: &bytes.Buffer{}})
+	got, err := a.chooseAccountFrom(manyAccounts(25), "Pilih: ", false, describe)
+	if err != nil || got != "u107" {
+		t.Fatalf("%q %v\n%s", got, err, out.String())
+	}
+	if calls != 1 || strings.Contains(out.String(), "u100") {
+		t.Fatalf("describe %d kali\n%s", calls, out.String())
+	}
+}
+
+func TestChooseAccountEmptyMeansAll(t *testing.T) {
+	a := newApp(Env{Stdin: strings.NewReader("\n"), Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
+	got, err := a.chooseAccountFrom(manyAccounts(25), "ENTER = semua: ", true, func(string) string { return "" })
+	if err != nil || got != "" {
+		t.Fatalf("%q %v", got, err)
+	}
+}
+
+func TestChooseAccountNumberWithoutListIsKeyword(t *testing.T) {
+	out := &bytes.Buffer{}
+	a := newApp(Env{Stdin: strings.NewReader("5\n\n"), Stdout: out, Stderr: &bytes.Buffer{}})
+	got, err := a.chooseAccountFrom(manyAccounts(25), "Pilih: ", true, func(string) string { return "" })
+	if err != nil || got != "" {
+		t.Fatalf("%q %v", got, err)
+	}
+	if !strings.Contains(out.String(), `Hasil "5" (2):`) {
+		t.Fatal(out.String())
+	}
+}

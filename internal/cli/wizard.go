@@ -254,23 +254,17 @@ func (a *App) pickAccount(ctx context.Context) (string, error) {
 		a.println("Belum ada akun hosting. Tambahkan token dulu di menu 1.")
 		return "", nil
 	}
-	for i, info := range all {
-		a.printf("%d. %s (%s, SSH %s)\n", i+1, info.AccountID, PlanLabel(info.Plan), info.Status)
+	byID := map[string]string{}
+	var ids []string
+	for _, info := range all {
+		byID[info.AccountID] = fmt.Sprintf("(%s, SSH %s)", PlanLabel(info.Plan), info.Status)
+		ids = append(ids, info.AccountID)
 	}
-	v, err := a.prompt.Line("Pilih akun: ")
+	items, err := a.accountChoices(ctx, ids)
 	if err != nil {
 		return "", err
 	}
-	v = strings.TrimSpace(v)
-	for i, info := range all {
-		if v == fmt.Sprint(i+1) || v == info.AccountID {
-			return info.AccountID, nil
-		}
-	}
-	if v != "" {
-		a.println("Akun tidak ditemukan.")
-	}
-	return "", nil
+	return a.chooseAccountFrom(items, "Pilih akun (nomor, id, atau kata kunci; ENTER = batal): ", true, func(id string) string { return byID[id] })
 }
 
 func (a *App) inventoryWizard(ctx context.Context) error {
@@ -296,24 +290,18 @@ func (a *App) askInventory(ctx context.Context) (inventoryOptions, bool, error) 
 		return opt, false, err
 	}
 	if len(accs) > 1 {
-		for i, acc := range accs {
-			a.printf("%d. %s (%s, token %s)\n", i+1, acc.ID, PlanLabel(acc.Plan), acc.Alias)
+		byID := map[string]string{}
+		var ids []string
+		for _, acc := range accs {
+			byID[acc.ID] = fmt.Sprintf("(%s, token %s)", PlanLabel(acc.Plan), acc.Alias)
+			ids = append(ids, acc.ID)
 		}
-		v, err := a.prompt.Line("Akun yang dipindai ulang (nomor atau id, ENTER = semua): ")
+		items, err := a.accountChoices(ctx, ids)
 		if err != nil {
 			return opt, false, err
 		}
-		v = strings.TrimSpace(v)
-		if v != "" {
-			for i, acc := range accs {
-				if v == fmt.Sprint(i+1) || v == acc.ID {
-					opt.Account = acc.ID
-				}
-			}
-			if opt.Account == "" {
-				a.say(toneWarn, "Akun tidak ditemukan. Pemindaian dibatalkan.")
-				return opt, false, nil
-			}
+		if opt.Account, err = a.chooseAccountFrom(items, "Akun yang dipindai ulang (nomor, id, atau kata kunci; ENTER = semua): ", true, func(id string) string { return byID[id] }); err != nil {
+			return opt, false, err
 		}
 	}
 	v, err = a.prompt.Line("Scan cepat tanpa menghitung ukuran folder? Lebih cepat untuk website dengan banyak file. (y/T): ")

@@ -374,8 +374,18 @@ func (a *App) chooseDestAccount(ctx context.Context, alias, sourceAccount string
 		return "", needsAction(fmt.Errorf("token %s tidak memiliki akun hosting tujuan selain akun sumber", alias))
 	}
 	pl := a.planner()
-	a.printf("Ditemukan %d akun di token %s:\n", len(options), alias)
-	for i, acc := range options {
+	byID := map[string]store.HostingAccount{}
+	var ids []string
+	for _, acc := range options {
+		byID[acc.ID] = acc
+		ids = append(ids, acc.ID)
+	}
+	items, err := a.accountChoices(ctx, ids)
+	if err != nil {
+		return "", err
+	}
+	describe := func(id string) string {
+		acc := byID[id]
 		label := "sisa kuota website: ?"
 		if q, _, err := pl.DestQuota(ctx, alias, acc); err == nil {
 			if q.Known {
@@ -386,21 +396,10 @@ func (a *App) chooseDestAccount(ctx context.Context, alias, sourceAccount string
 		} else {
 			label = "kuota tidak terbaca: " + a.redactor.String(err.Error())
 		}
-		a.printf("%d. %s  (%s) — %s\n", i+1, acc.ID, PlanLabel(acc.Plan), label)
+		return fmt.Sprintf("(%s) — %s", PlanLabel(acc.Plan), label)
 	}
-	for {
-		v, err := a.prompt.Line("Pilih salah satu: ")
-		if err != nil {
-			return "", err
-		}
-		v = strings.TrimSpace(v)
-		for i, acc := range options {
-			if v == strconv.Itoa(i+1) || v == acc.ID {
-				return acc.ID, nil
-			}
-		}
-		a.say(toneWarn, "Pilihan tidak dikenal.")
-	}
+	a.printf("Ditemukan %d akun di token %s:\n", len(options), alias)
+	return a.chooseAccountFrom(items, "Pilih salah satu (nomor, id, atau kata kunci): ", false, describe)
 }
 
 func checkTag(status string) string {
