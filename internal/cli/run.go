@@ -264,7 +264,7 @@ func (a *App) showStatus(ctx context.Context, batchID, domain string) error {
 		items, _ := a.store.ListItems(ctx, b.ID)
 		a.printf("\nBatch %s · %s · %s/%s → %s/%s\n", b.ID, b.Status, b.SourceAlias, b.SourceAccount, b.DestAlias, b.DestAccount)
 		tw := tabwriter.NewWriter(a.out(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "  WEBSITE\tSTATUS\tDUMMY\tCATATAN")
+		fmt.Fprintf(tw, "  WEBSITE\t%s\tDUMMY\tCATATAN\n", a.statusCell("STATUS"))
 		for _, it := range items {
 			note := it.LastError
 			if it.ManualCode != "" {
@@ -274,7 +274,7 @@ func (a *App) showStatus(ctx context.Context, batchID, domain string) error {
 			if dummy == "" {
 				dummy = "-"
 			}
-			fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", it.SourceDomain, pipeline.ItemLabel(it), dummy, a.redactor.String(note))
+			fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", it.SourceDomain, a.statusCell(pipeline.ItemLabel(it)), dummy, a.redactor.String(note))
 		}
 		tw.Flush()
 	}

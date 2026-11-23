@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -104,16 +105,16 @@ func (a *App) accountAdd(ctx context.Context, alias string, tokenStdin bool) err
 	a.printf("Memvalidasi token... ")
 	res, err := a.accounts().Add(ctx, alias, token)
 	if err != nil {
-		a.println("GAGAL")
+		a.say(toneDanger, "GAGAL")
 		if errors.Is(err, account.ErrTokenRejected) || errors.Is(err, account.ErrAliasExists) {
 			return needsAction(err)
 		}
 		return err
 	}
-	a.println("OK")
+	a.say(toneOK, "OK")
 	a.println()
 	printDiscovery(a, alias, res.Discovery)
-	a.printf("Token %q tersimpan di Windows Credential Manager.\n", alias)
+	a.say(toneOK, fmt.Sprintf("Token %q tersimpan di Windows Credential Manager.", alias))
 	return nil
 }
 
@@ -161,43 +162,60 @@ func (a *App) accountList(ctx context.Context) error {
 		a.println("Belum ada token terdaftar. Tambahkan dengan: migrator account add")
 		return nil
 	}
-	tw := tabwriter.NewWriter(a.out(), 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ALIAS\tSTATUS\tDIUJI TERAKHIR\tAKUN HOSTING")
-	for _, it := range items {
-		var accs []string
-		for _, acc := range it.Accounts {
-			accs = append(accs, fmt.Sprintf("%s (%s, %d web)", acc.ID, PlanLabel(acc.Plan), acc.WebsiteCount))
-		}
-		if len(accs) == 0 {
-			accs = []string{"-"}
-		}
-		checked := it.Credential.LastCheckedAt
-		if checked == "" {
-			checked = "-"
-		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", it.Credential.Alias, it.Credential.LastStatus, checked, strings.Join(accs, ", "))
-	}
-	tw.Flush()
+	a.writeAccountList(items)
 	for _, it := range items {
 		if it.Credential.LastStatus == store.CredentialRejected {
-			a.printf("\nToken %q DITOLAK Hostinger (%s). Buat token baru di hPanel, lalu jalankan 'migrator account remove %s' dan 'migrator account add --alias %s'.\n",
-				it.Credential.Alias, a.redactor.String(it.Credential.LastError), it.Credential.Alias, it.Credential.Alias)
+			a.println()
+			a.say(toneDanger, fmt.Sprintf("Token %q DITOLAK Hostinger (%s). Buat token baru di hPanel, lalu jalankan 'migrator account remove %s' dan 'migrator account add --alias %s'.",
+				it.Credential.Alias, a.redactor.String(it.Credential.LastError), it.Credential.Alias, it.Credential.Alias))
 		}
 	}
 	return nil
+}
+
+func (a *App) writeAccountList(items []account.Listing) {
+	aliasW, statusW := 0, 0
+	for _, it := range items {
+		aliasW = max(aliasW, len(it.Credential.Alias))
+		statusW = max(statusW, len(it.Credential.LastStatus))
+	}
+	for _, it := range items {
+		status := a.statusCell(fmt.Sprintf("%-*s", statusW, it.Credential.LastStatus))
+		a.printf("%-*s  %s  %s\n", aliasW, it.Credential.Alias, status, checkedLabel(it.Credential.LastCheckedAt))
+		if len(it.Accounts) == 0 {
+			a.println("  tidak ada akun hosting")
+			continue
+		}
+		tw := tabwriter.NewWriter(a.out(), 0, 0, 2, ' ', 0)
+		for _, acc := range it.Accounts {
+			fmt.Fprintf(tw, "  %s\t%s\t%d web\n", acc.ID, PlanLabel(acc.Plan), acc.WebsiteCount)
+		}
+		tw.Flush()
+	}
+}
+
+func checkedLabel(v string) string {
+	if v == "" {
+		return "belum diuji"
+	}
+	t, err := time.Parse(time.RFC3339, v)
+	if err != nil {
+		return "diuji " + v
+	}
+	return "diuji " + t.UTC().Format("2006-01-02 15:04") + " UTC"
 }
 
 func (a *App) accountTest(ctx context.Context, alias string) error {
 	a.printf("Menguji token %s... ", alias)
 	res, err := a.accounts().Test(ctx, alias)
 	if err != nil {
-		a.println("GAGAL")
+		a.say(toneDanger, "GAGAL")
 		if errors.Is(err, account.ErrTokenRejected) || errors.Is(err, account.ErrAliasNotFound) || errors.Is(err, account.ErrTokenMissing) {
 			return needsAction(err)
 		}
 		return err
 	}
-	a.println("OK")
+	a.say(toneOK, "OK")
 	a.println()
 	printDiscovery(a, alias, res.Discovery)
 	return nil
@@ -206,7 +224,7 @@ func (a *App) accountTest(ctx context.Context, alias string) error {
 func (a *App) accountRemove(ctx context.Context, alias string, yes bool) error {
 	if !yes {
 		a.printf("Token %q akan dihapus dari komputer ini saja. Hostinger tidak disentuh.\n", alias)
-		ok, err := a.prompt.Confirm(fmt.Sprintf("Ketik %s untuk konfirmasi: ", alias), alias)
+		ok, err := a.prompt.Confirm(a.color(toneDanger, fmt.Sprintf("Ketik %s untuk konfirmasi: ", alias)), alias)
 		if err != nil {
 			return err
 		}
@@ -221,6 +239,6 @@ func (a *App) accountRemove(ctx context.Context, alias string, yes bool) error {
 		}
 		return err
 	}
-	a.printf("Token %q dihapus dari Credential Manager dan database lokal.\n", alias)
+	a.say(toneDanger, fmt.Sprintf("Token %q dihapus dari Credential Manager dan database lokal.", alias))
 	return nil
 }

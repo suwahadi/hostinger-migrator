@@ -101,7 +101,7 @@ func (a *App) runCleanup(ctx context.Context, batchID string, includeDummy bool,
 		}
 		a.printf("\nCLEANUP batch %s (%s/%s)\n", b.ID, b.SourceAlias, b.SourceAccount)
 		if len(pass)+len(dummies) > 0 {
-			a.println("Lolos gerbang (website + database di akun sumber akan DIHAPUS, domain tidak dihapus):")
+			a.say(toneDanger, "Lolos gerbang (website + database di akun sumber akan DIHAPUS, domain tidak dihapus):")
 			for _, it := range append(pass, dummies...) {
 				target := it.SourceTempDomain
 				if target == "" {
@@ -120,7 +120,7 @@ func (a *App) runCleanup(ctx context.Context, batchID string, includeDummy bool,
 			a.println("Tidak ada website yang lolos gerbang cleanup.")
 			continue
 		}
-		ok, err := a.prompt.Confirm("Ketik HAPUS untuk menghapus website sumber yang lolos: ", gate.Words[gate.KindCleanup])
+		ok, err := a.prompt.Confirm(a.color(toneDanger, "Ketik HAPUS untuk menghapus website sumber yang lolos: "), gate.Words[gate.KindCleanup])
 		if err != nil {
 			return err
 		}
@@ -146,14 +146,14 @@ func (a *App) runCleanup(ctx context.Context, batchID string, includeDummy bool,
 			}
 			ic.Close()
 			if err != nil {
-				fmt.Fprintln(a.env.Stderr, "ERROR: "+a.redactor.String(it.SourceDomain+": "+err.Error()))
+				a.printError(it.SourceDomain + ": " + err.Error())
 				continue
 			}
 			a.store.UpdateItem(ctx, it.ID, "operator", "cleanup.dummy_source", func(x *store.PipelineItem) error {
 				x.LastError = "website sumber sudah dihapus (DUMMY_ONLY)"
 				return nil
 			})
-			a.printf("Sumber %s (DUMMY_ONLY) dihapus.\n", it.SourceDomain)
+			a.say(toneDanger, fmt.Sprintf("Sumber %s (DUMMY_ONLY) dihapus.", it.SourceDomain))
 		}
 		if len(pass) > 0 {
 			started = true

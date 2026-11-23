@@ -52,8 +52,7 @@ func Execute(args []string, env Env) int {
 	if errors.Is(err, ErrInputClosed) {
 		return ExitOK
 	}
-	msg := app.redactor.String(translateCobraError(err.Error()))
-	fmt.Fprintln(app.env.Stderr, "ERROR: "+msg)
+	app.printError(translateCobraError(err.Error()))
 	if app.wizardMode {
 		app.prompt.Line("Tekan ENTER untuk menutup jendela...")
 	}

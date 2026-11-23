@@ -81,7 +81,7 @@ func (a *App) approveEmail(ctx context.Context, batchID string) error {
 		a.println("Langkah: password mailbox sumber diganti (password baru) → backup IMAP + validasi jumlah pesan →")
 		a.println("mailbox sumber DIHAPUS → Anda mengaktifkan email di akun tujuan → mailbox dibuat ulang → pesan dipulihkan.")
 		a.println("Selama proses, email domain tersebut tidak bisa menerima pesan (downtime disetujui di PRD).")
-		ok, err := a.prompt.Confirm("Ketik HAPUS EMAIL untuk menyetujui: ", gate.Words[gate.KindDeleteEmail])
+		ok, err := a.prompt.Confirm(a.color(toneDanger, "Ketik HAPUS EMAIL untuk menyetujui: "), gate.Words[gate.KindDeleteEmail])
 		if err != nil {
 			return err
 		}
@@ -92,7 +92,7 @@ func (a *App) approveEmail(ctx context.Context, batchID string) error {
 		if err := gate.Request(ctx, a.store, b.ID, gate.KindDeleteEmail, domains, gate.Words[gate.KindDeleteEmail]); err != nil {
 			return err
 		}
-		a.printf("Pemindahan email disetujui untuk %d domain.\n", len(domains))
+		a.say(toneOK, fmt.Sprintf("Pemindahan email disetujui untuk %d domain.", len(domains)))
 	}
 	if !any {
 		a.println("Tidak ada domain yang menunggu persetujuan email.")

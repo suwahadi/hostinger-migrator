@@ -114,7 +114,7 @@ func (a *App) runInventory(ctx context.Context, alias string, refresh bool) erro
 		if err := a.ensureInventory(ctx, al, refresh); err != nil {
 			var ee *exitError
 			if errors.As(err, &ee) {
-				fmt.Fprintln(a.env.Stderr, "ERROR: "+a.redactor.String(err.Error()))
+				a.printError(err.Error())
 				failed = append(failed, err)
 				continue
 			}

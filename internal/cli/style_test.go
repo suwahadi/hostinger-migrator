@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
 	"text/tabwriter"
 
+	"hostinger-migrator/internal/account"
 	"hostinger-migrator/internal/store"
 )
 
@@ -57,7 +59,7 @@ func TestStatusColumnAligned(t *testing.T) {
 		a := newApp(Env{Stdout: out})
 		a.colorOut = color
 		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-		for _, r := range [][2]string{{"a", "AKTIF"}, {"bbbb", "DITOLAK"}, {"cc", "BACKUP_RUNNING"}} {
+		for _, r := range [][2]string{{"NAMA", "STATUS"}, {"a", "AKTIF"}, {"bbbb", "DITOLAK"}, {"cc", "BACKUP_RUNNING"}} {
 			fmt.Fprintf(tw, "%s\t%s\tx\n", r[0], a.statusCell(r[1]))
 		}
 		tw.Flush()
@@ -142,5 +144,34 @@ func TestManualMenuEmptyPauses(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("tidak memuat %q", want)
 		}
+	}
+}
+
+func TestAccountListOneAccountPerLine(t *testing.T) {
+	out := &bytes.Buffer{}
+	a := newApp(Env{Stdout: out})
+	a.writeAccountList([]account.Listing{
+		{Credential: store.Credential{Alias: "sumber", LastStatus: "AKTIF", LastCheckedAt: "2026-11-23T02:39:03Z"},
+			Accounts: []store.HostingAccount{{ID: "u111", Plan: "hostinger_premium", WebsiteCount: 1}, {ID: "u222", Plan: "hostinger_business_v3", WebsiteCount: 46}}},
+		{Credential: store.Credential{Alias: "lama", LastStatus: "DITOLAK"}},
+	})
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	want := [][]string{
+		{"sumber", "AKTIF", "diuji", "2026-11-23", "02:39", "UTC"},
+		{"u111", "Premium", "1", "web"},
+		{"u222", "hostinger_business_v3", "46", "web"},
+		{"lama", "DITOLAK", "belum", "diuji"},
+		{"tidak", "ada", "akun", "hosting"},
+	}
+	if len(lines) != len(want) {
+		t.Fatalf("jumlah baris %d:\n%s", len(lines), out.String())
+	}
+	for i, w := range want {
+		if got := strings.Fields(lines[i]); !reflect.DeepEqual(got, w) {
+			t.Errorf("baris %d: %q", i, got)
+		}
+	}
+	if strings.Index(lines[0], "AKTIF") != strings.Index(lines[3], "DITOLAK") {
+		t.Error("kolom status harus rata")
 	}
 }

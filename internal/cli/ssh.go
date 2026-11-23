@@ -191,11 +191,11 @@ func (a *App) setupOne(ctx context.Context, svc *sshx.Service, kp *sshx.KeyPair,
 		a.printf("Menguji koneksi ke %s:%d sebagai %s... ", info.Host, info.Port, info.User)
 		res, err := svc.Check(ctx, info, acceptNew)
 		if err != nil {
-			a.println("GAGAL")
+			a.say(toneDanger, "GAGAL")
 			return false, err
 		}
 		if res.Ready() {
-			a.println("OK")
+			a.say(toneOK, "OK")
 			a.printf("whoami %s · home %s · SFTP OK · login dengan %s\n", res.Whoami, res.Home, authLabel(res.Info.Auth))
 			if res.NewHostKey {
 				a.printf("Fingerprint server %s disimpan; koneksi berikutnya diverifikasi terhadap nilai ini.\n", res.Fingerprint)
@@ -203,13 +203,13 @@ func (a *App) setupOne(ctx context.Context, svc *sshx.Service, kp *sshx.KeyPair,
 			a.printf("Status: %s\n", store.SSHReady)
 			return true, nil
 		}
-		a.println("GAGAL")
+		a.say(toneDanger, "GAGAL")
 		a.printf("Penyebab (%s): %s\n", res.Cause, res.Message)
 		if res.Cause == sshx.CauseHostKeyChanged {
 			return false, nil
 		}
 		info = res.Info
-		v, err := a.prompt.Line("Ketik ULANG untuk mencoba lagi, PASSWORD untuk memakai password SSH, atau LEWATI: ")
+		v, err := a.prompt.Line(a.color(toneWarn, "Ketik ULANG untuk mencoba lagi, PASSWORD untuk memakai password SSH, atau LEWATI: "))
 		if err != nil {
 			return false, err
 		}
@@ -298,7 +298,7 @@ func (a *App) sshTest(ctx context.Context, account string) error {
 		return needsAction(store.ErrNoAccount)
 	}
 	tw := tabwriter.NewWriter(a.out(), 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "AKUN\tSTATUS\tHOST:PORT\tUSER\tLOGIN\tCATATAN")
+	fmt.Fprintf(tw, "AKUN\t%s\tHOST:PORT\tUSER\tLOGIN\tCATATAN\n", a.statusCell("STATUS"))
 	problems := 0
 	found := false
 	for _, info := range all {
@@ -308,7 +308,7 @@ func (a *App) sshTest(ctx context.Context, account string) error {
 		found = true
 		if info.Host == "" {
 			problems++
-			fmt.Fprintf(tw, "%s\t%s\t-\t-\t-\tjalankan 'migrator ssh setup %s'\n", info.AccountID, info.Status, info.AccountID)
+			fmt.Fprintf(tw, "%s\t%s\t-\t-\t-\tjalankan 'migrator ssh setup %s'\n", info.AccountID, a.statusCell(info.Status), info.AccountID)
 			continue
 		}
 		res, err := svc.Check(ctx, info, false)
@@ -320,7 +320,7 @@ func (a *App) sshTest(ctx context.Context, account string) error {
 			problems++
 			note = res.Message
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s:%d\t%s\t%s\t%s\n", info.AccountID, res.Info.Status, info.Host, info.Port, info.User, authLabel(res.Info.Auth), note)
+		fmt.Fprintf(tw, "%s\t%s\t%s:%d\t%s\t%s\t%s\n", info.AccountID, a.statusCell(res.Info.Status), info.Host, info.Port, info.User, authLabel(res.Info.Auth), note)
 	}
 	tw.Flush()
 	if account != "" && !found {

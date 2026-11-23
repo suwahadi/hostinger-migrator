@@ -91,7 +91,7 @@ func (a *App) runAudit(ctx context.Context, alias string) error {
 			}
 			if errors.Is(err, capability.ErrTokenRejected) || errors.Is(err, account.ErrTokenMissing) {
 				blocking = append(blocking, err)
-				fmt.Fprintln(a.env.Stderr, "ERROR: "+a.redactor.String(err.Error()))
+				a.printError(err.Error())
 				continue
 			}
 			return err
@@ -109,9 +109,9 @@ func (a *App) runAudit(ctx context.Context, alias string) error {
 func (a *App) printReport(rep capability.Report) {
 	a.printf("\nAkun %s (%s)\n", rep.AccountID, PlanLabel(rep.Plan))
 	tw := tabwriter.NewWriter(a.out(), 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "KODE\tSTATUS\tCATATAN")
+	fmt.Fprintf(tw, "KODE\t%s\tCATATAN\n", a.statusCell("STATUS"))
 	for _, r := range rep.Results {
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", r.Code, r.Status, a.redactor.String(r.Note))
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", r.Code, a.statusCell(r.Status), a.redactor.String(r.Note))
 	}
 	tw.Flush()
 	a.printf("Ringkasan: SUPPORTED %d · MANUAL %d · UNSUPPORTED %d · UNKNOWN %d\n",

@@ -78,7 +78,7 @@ func (a *App) runCutover(ctx context.Context, batchID, only string) error {
 		a.println("  3. Anda mengganti domain website sumber ke domain sementara di hPanel (situs lama tetap hidup)")
 		a.println("  4. Domain dipasang di website tujuan, record A/AAAA diubah ke IP tujuan (MX, TXT, CNAME pihak ketiga dipertahankan)")
 		a.println("  5. SSL dipasang dan verifikasi akhir lewat domain asli")
-		ok, err := a.prompt.Confirm("Operasi ini mengubah domain dan DNS. Ketik CUTOVER untuk melanjutkan: ", gate.Words[gate.KindCutover])
+		ok, err := a.prompt.Confirm(a.color(toneWarn, "Operasi ini mengubah domain dan DNS. Ketik CUTOVER untuk melanjutkan: "), gate.Words[gate.KindCutover])
 		if err != nil {
 			return err
 		}
@@ -89,7 +89,7 @@ func (a *App) runCutover(ctx context.Context, batchID, only string) error {
 		if err := gate.Request(ctx, a.store, b.ID, gate.KindCutover, domains, gate.Words[gate.KindCutover]); err != nil {
 			return err
 		}
-		a.printf("Cutover disetujui untuk %d website.\n", len(domains))
+		a.say(toneOK, fmt.Sprintf("Cutover disetujui untuk %d website.", len(domains)))
 	}
 	if !any {
 		a.println("Tidak ada website VERIFIED yang menunggu cutover.")
@@ -104,7 +104,7 @@ func (a *App) runRollback(ctx context.Context, domain, batchID string) error {
 		return needsAction(fmt.Errorf("website %s tidak ada di batch mana pun", domain))
 	}
 	a.printf("Rollback %s (status %s): DNS dikembalikan dari snapshot, parked domain di tujuan dilepas, persetujuan cutover dicabut.\n", domain, pipeline.ItemLabel(it))
-	ok, err := a.prompt.Confirm("Ketik ROLLBACK untuk melanjutkan: ", "ROLLBACK")
+	ok, err := a.prompt.Confirm(a.color(toneDanger, "Ketik ROLLBACK untuk melanjutkan: "), "ROLLBACK")
 	if err != nil {
 		return err
 	}

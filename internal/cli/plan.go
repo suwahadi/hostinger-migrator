@@ -68,7 +68,7 @@ func (a *App) chooseAlias(ctx context.Context, role string) (string, error) {
 		if strings.EqualFold(v, "B") {
 			alias, err := a.addTokenInteractive(ctx)
 			if err != nil {
-				fmt.Fprintln(a.env.Stderr, "ERROR: "+a.redactor.String(err.Error()))
+				a.printError(err.Error())
 				creds, _ = a.store.ListCredentials(ctx)
 				continue
 			}
@@ -156,19 +156,20 @@ func (a *App) runPlan(ctx context.Context, o planOptions) error {
 		a.printSteps(plan)
 		a.println()
 		if plan.Rejected() {
-			a.println("RENCANA DITOLAK (dry-run). Tidak ada yang disimpan atau diubah.")
+			a.say(toneDanger, "RENCANA DITOLAK (dry-run). Tidak ada yang disimpan atau diubah.")
 			return needsAction(rejectError(plan))
 		}
-		a.println("DRY-RUN selesai. Tidak ada yang disimpan atau diubah. Jalankan tanpa --dry-run untuk menyimpan rencana.")
+		a.say(toneOK, "DRY-RUN selesai. Tidak ada yang disimpan atau diubah. Jalankan tanpa --dry-run untuk menyimpan rencana.")
 		return nil
 	}
 	if plan.Rejected() {
 		a.println()
-		a.println("RENCANA DITOLAK. Perbaiki penyebab di atas lalu ulangi.")
+		a.say(toneDanger, "RENCANA DITOLAK. Perbaiki penyebab di atas lalu ulangi.")
 		return needsAction(rejectError(plan))
 	}
 	if w := plan.Warnings(); len(w) > 0 {
-		ok, err := a.prompt.Confirm(fmt.Sprintf("\nAda %d peringatan di atas. Ketik LANJUT untuk menerimanya: ", len(w)), "LANJUT")
+		a.println()
+		ok, err := a.prompt.Confirm(a.color(toneWarn, fmt.Sprintf("Ada %d peringatan di atas. Ketik LANJUT untuk menerimanya: ", len(w))), "LANJUT")
 		if err != nil {
 			return err
 		}
@@ -178,7 +179,7 @@ func (a *App) runPlan(ctx context.Context, o planOptions) error {
 		}
 	}
 	a.println()
-	ok, err := a.prompt.Confirm(fmt.Sprintf("Konfirmasi: Anda yakin memindahkan domain dan layanan terkait\ndi akun %s %s ke tujuan %s %s? Ketik YAKIN: ", o.sourceAlias, o.sourceAccount, o.destAlias, o.destAccount), "YAKIN")
+	ok, err := a.prompt.Confirm(a.color(toneOK, fmt.Sprintf("Konfirmasi: Anda yakin memindahkan domain dan layanan terkait\ndi akun %s %s ke tujuan %s %s? Ketik YAKIN: ", o.sourceAlias, o.sourceAccount, o.destAlias, o.destAccount)), "YAKIN")
 	if err != nil {
 		return err
 	}
@@ -190,7 +191,8 @@ func (a *App) runPlan(ctx context.Context, o planOptions) error {
 	if err != nil {
 		return err
 	}
-	a.printf("\nBatch %s tersimpan dengan status %s (%d website).\n", id, store.BatchPlanned, len(plan.ActiveItems()))
+	a.println()
+	a.say(toneOK, fmt.Sprintf("Batch %s tersimpan dengan status %s (%d website).", id, store.BatchPlanned, len(plan.ActiveItems())))
 	return a.startWorker(ctx, false)
 }
 
@@ -397,7 +399,7 @@ func checkTag(status string) string {
 func (a *App) printPlan(p *planner.Plan) {
 	r := p.Request
 	a.println()
-	a.println("RINGKASAN RENCANA")
+	a.say(toneTitle, "RINGKASAN RENCANA")
 	a.printf("Sumber : %s / %s (%d website)\n", r.SourceAlias, r.SourceAccount, len(p.ActiveItems()))
 	a.printf("Tujuan : %s / %s (%s)\n", r.DestAlias, r.DestAccount, PlanLabel(p.DestPlan))
 	size := planner.HumanBytes(p.TotalSize)
@@ -412,7 +414,11 @@ func (a *App) printPlan(p *planner.Plan) {
 			if it.Blocked {
 				status = "→ BLOCKED: " + it.BlockReason
 			}
-			a.printf("  %s  %s · %s %s\n", it.Website.Domain, typeLabel(it.Website), sizeLabel(it.Website.SizeBytes), status)
+			line := fmt.Sprintf("  %s  %s · %s %s", it.Website.Domain, typeLabel(it.Website), sizeLabel(it.Website.SizeBytes), status)
+			if it.Blocked {
+				line = a.color(toneDanger, line)
+			}
+			a.println(line)
 			for _, n := range it.Notes {
 				a.printf("      catatan: %s\n", n)
 			}
@@ -420,13 +426,23 @@ func (a *App) printPlan(p *planner.Plan) {
 	}
 	a.println("Pemeriksaan:")
 	for _, c := range p.Checks {
-		a.printf("  %s %-16s %s\n", checkTag(c.Status), c.Code, c.Message)
+		a.say(checkTone(c.Status), fmt.Sprintf("  %s %-16s %s", checkTag(c.Status), c.Code, c.Message))
 	}
+}
+
+func checkTone(status string) tone {
+	switch status {
+	case planner.CheckOK:
+		return toneOK
+	case planner.CheckWarn:
+		return toneWarn
+	}
+	return toneDanger
 }
 
 func (a *App) printSteps(p *planner.Plan) {
 	a.println()
-	a.println("URUTAN LANGKAH (dry-run, tidak ada operasi tulis)")
+	a.say(toneTitle, "URUTAN LANGKAH (dry-run, tidak ada operasi tulis)")
 	for _, it := range p.Items {
 		a.printf("%s:\n", it.Website.Domain)
 		for i, s := range it.Steps {
