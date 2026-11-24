@@ -2,7 +2,7 @@
 
 Alat baris perintah (CLI) untuk memindahkan website beserta layanan terkait — file, database, DNS, SSL, dan email — dari satu akun Hostinger Shared Hosting ke akun Hostinger lain secara otomatis, aman, bisa dilanjutkan setelah gangguan, dan menghasilkan laporan lengkap dalam bahasa Indonesia.
 
-> **Status: v1.0.0-rc7.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
+> **Status: v1.0.0-rc8.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
 
 ---
 
@@ -37,7 +37,7 @@ Tampilan awal wizard:
 
  Nama Program : Hostinger Migrator
  Pembuat      : Suwahadi
- Versi        : 1.0.0-rc7
+ Versi        : 1.0.0-rc8
  Platform     : Windows 10/11 64bit
 
 ==================================
@@ -184,17 +184,12 @@ ssl:
   batas_tunggu_menit: 60
 cleanup:
   wajib_ssl_aktif: true
-kuota_paket:
-  hostinger_single:
-    website: 1
-  hostinger_premium:
-    website: 100
-  hostinger_business:
-    website: 100
 email:
   imap_host: imap.hostinger.com:993
   imap_tls: true
 ```
+
+Rencana tidak memeriksa kapasitas akun tujuan (jatah website, sisa disk, jatah database); kapasitas dikelola sendiri di hPanel. Bila kapasitas tujuan ternyata penuh, website terkait berhenti dengan status `FAILED` atau tindakan manual saat migrasi berjalan, dan bisa diulang dengan `migrator retry` setelah kapasitas ditambah. Kunci `kuota_paket` di `config.yaml` lama masih diterima tetapi tidak dipakai lagi.
 
 Batas API: Hostinger mengizinkan 90 panggilan per 60 detik per token. `rate_per_menit: 80` ditambah `rate_burst: 5` menjaga jumlah panggilan di bawah 85 per menit. `config.yaml` yang dibuat versi sebelum `1.0.0-rc5` masih berisi `rate_per_menit: 60`; ubah ke `80` agar lebih cepat (atau hapus `config.yaml` supaya dibuat ulang).
 
@@ -237,7 +232,7 @@ Butuh Go 1.26+.
 go vet ./...
 go test ./...
 go test -race ./...
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc7" -o dist/migrator.exe ./cmd/migrator
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc8" -o dist/migrator.exe ./cmd/migrator
 ```
 
 Pengujian memakai server tiruan in-process: API Hostinger, SSH yang menjalankan perintah shell sungguhan dengan `mysql`/`mysqldump` tiruan, HTTP, dan IMAP (`tests/`).
