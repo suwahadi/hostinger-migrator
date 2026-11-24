@@ -28,7 +28,7 @@ func newPlanCmd(app *App) *cobra.Command {
 		Use:   "plan",
 		Short: "Buat rencana migrasi (pilih sumber, website, tujuan) dan jalankan semua pemeriksaan",
 		Long: "Membuat rencana migrasi satu akun sumber ke satu akun tujuan.\n" +
-			"Pemeriksaan: token aktif, inventaris, bentrok domain, kuota website, disk (ukuran × 1,3), kuota database, SSH kedua sisi.\n" +
+			"Pemeriksaan: token aktif, inventaris, bentrok domain, SSH kedua sisi. Kapasitas akun tujuan tidak diperiksa (kelola di hPanel).\n" +
 			"Dengan --dry-run hanya menampilkan pemeriksaan dan urutan langkah tanpa menyimpan atau mengubah apa pun.",
 		Example: "  migrator plan\n  migrator plan --dry-run\n  migrator plan --sumber xyz --akun-sumber u494983133 --web domainanda.com,toko.id --tujuan zyx --akun-tujuan u73839202",
 		Args:    noArgs,

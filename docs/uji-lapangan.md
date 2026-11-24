@@ -23,7 +23,7 @@ Persiapan: satu akun uji **Single** dan satu akun uji **Premium/Business** (sumb
 | B1 | `inventory --refresh` | Root path, tipe, ukuran, DB, mailbox sesuai hPanel | |
 | B2 | Apakah Free Business Email muncul di inventaris (R9) | Mailbox tampil | |
 | B3 | `plan --dry-run` ke akun tujuan berpaket kecil atau disk hampir penuh | Rencana diterima, tanpa pemeriksaan kuota website/disk/database | |
-| B4 | Migrasi ke akun tujuan yang kapasitasnya benar-benar penuh | Item `FAILED` atau tindakan manual; setelah kapasitas ditambah, `migrator retry` melanjutkan | |
+| B4 | Migrasi ke akun tujuan yang kapasitasnya benar-benar penuh | Setelah kapasitas ditambah: item `FAILED` lanjut dengan `retry --failed`; item tindakan manual (mis. `MANUAL_CREATE_SITE`) lanjut lewat `pending` lalu `confirm` | |
 | B5 | `inventory --refresh` dengan `rate_per_menit: 80`: catat durasi total dan cari `batas rate API tercapai` di `data/logs/*.log` | Progres per website tampil; tidak ada atau jarang 429 | |
 | B6 | `inventory --refresh --cepat` di akun yang sama | Lebih cepat, ukuran `?`, tipe sama dengan scan penuh | |
 | B7 | Tutup jendela di tengah `inventory --refresh` (token dengan 2 akun atau lebih), buka lagi, menu 3 jawab `T` | Hanya akun yang belum selesai dipindai | |

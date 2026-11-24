@@ -189,7 +189,7 @@ email:
   imap_tls: true
 ```
 
-Rencana tidak memeriksa kapasitas akun tujuan (jatah website, sisa disk, jatah database); kapasitas dikelola sendiri di hPanel. Bila kapasitas tujuan ternyata penuh, website terkait berhenti dengan status `FAILED` atau tindakan manual saat migrasi berjalan, dan bisa diulang dengan `migrator retry` setelah kapasitas ditambah. Kunci `kuota_paket` di `config.yaml` lama masih diterima tetapi tidak dipakai lagi.
+Rencana tidak memeriksa kapasitas akun tujuan (jatah website, sisa disk, jatah database); kapasitas dikelola sendiri di hPanel. Bila kapasitas tujuan ternyata penuh, website terkait berhenti saat migrasi berjalan. Setelah kapasitas ditambah, item `FAILED` dilanjutkan dengan `migrator retry --failed`, sedangkan item yang menunggu tindakan manual (mis. `MANUAL_CREATE_SITE` bila Hostinger menolak membuat website) diselesaikan lewat `migrator pending` lalu `migrator confirm`. Kunci `kuota_paket` di `config.yaml` lama masih diterima tetapi tidak dipakai lagi.
 
 Batas API: Hostinger mengizinkan 90 panggilan per 60 detik per token. `rate_per_menit: 80` ditambah `rate_burst: 5` menjaga jumlah panggilan di bawah 85 per menit. `config.yaml` yang dibuat versi sebelum `1.0.0-rc5` masih berisi `rate_per_menit: 60`; ubah ke `80` agar lebih cepat (atau hapus `config.yaml` supaya dibuat ulang).
 

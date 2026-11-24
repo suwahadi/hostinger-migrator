@@ -165,3 +165,16 @@ func TestChooseAccountNumberWithoutListIsKeyword(t *testing.T) {
 		t.Fatal(out.String())
 	}
 }
+
+func TestPlanHelpOmitsCapacityChecks(t *testing.T) {
+	out := &bytes.Buffer{}
+	code := Execute([]string{"plan", "--help"}, Env{Stdin: strings.NewReader(""), Stdout: out, Stderr: &bytes.Buffer{}})
+	if code != ExitOK || !strings.Contains(out.String(), "Pemeriksaan:") {
+		t.Fatalf("(%d) %s", code, out.String())
+	}
+	for _, gone := range []string{"kuota website", "disk", "kuota database"} {
+		if strings.Contains(out.String(), gone) {
+			t.Errorf("bantuan plan masih menyebut %q", gone)
+		}
+	}
+}
