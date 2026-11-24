@@ -211,16 +211,21 @@ func TestInventoryResumeAndSingleAccount(t *testing.T) {
 	}
 }
 
-func TestPlanDryRunRejectedWhenQuotaInsufficient(t *testing.T) {
+func TestPlanDryRunIgnoresCapacity(t *testing.T) {
 	h := newPlanHarness(t, "hostinger_single")
 	code := h.run("", "plan", "--dry-run", "--sumber", "xyz", "--web", "domainanda.com,toko.id", "--tujuan", "zyx", "--akun-tujuan", "u73839202")
 	out := h.stdout.String()
-	if code != cli.ExitAction {
-		t.Fatalf("kuota kurang harus exit 2, dapat %d\n%s%s", code, out, h.stderr.String())
+	if code != cli.ExitOK {
+		t.Fatalf("kapasitas tujuan tidak boleh menolak, dapat %d\n%s%s", code, out, h.stderr.String())
 	}
-	for _, want := range []string{"RINGKASAN RENCANA", "Tujuan : zyx / u73839202 (Single)", "[GAGAL]      KUOTA_WEBSITE", "Sisa kuota website tujuan 0 (kuota 1, terpakai 1), dibutuhkan 2", "URUTAN LANGKAH", "RENCANA DITOLAK (dry-run)"} {
+	for _, want := range []string{"RINGKASAN RENCANA", "Tujuan : zyx / u73839202 (Single)", "URUTAN LANGKAH", "DRY-RUN selesai"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output tidak memuat %q", want)
+		}
+	}
+	for _, gone := range []string{"KUOTA_WEBSITE", "DISK_TUJUAN", "KUOTA_DATABASE", "RENCANA DITOLAK"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("output masih memuat %q", gone)
 		}
 	}
 	if t.Failed() {
@@ -243,11 +248,7 @@ func TestPlanDryRunThenSave(t *testing.T) {
 		"Sumber : xyz / u494983133 (2 website)",
 		"Perkiraan backup:",
 		"Database: 1 · Mailbox: 2",
-		"[OK]         KUOTA_WEBSITE",
-		"Sisa kuota website tujuan 99, dibutuhkan 2",
-		"[OK]         DISK_TUJUAN",
 		"[OK]         SSH_TUJUAN",
-		"[PERINGATAN] KUOTA_DATABASE",
 		"tar seluruh folder /home/u494983133/domains/domainanda.com",
 		"header Host: domainanda.com",
 		"Ubah DNS di nameserver eksternal: checkpoint manual",
@@ -263,11 +264,11 @@ func TestPlanDryRunThenSave(t *testing.T) {
 	if len(h.batches()) != 0 {
 		t.Fatal("dry-run tidak boleh menyimpan batch")
 	}
-	code = h.run(answers("LANJUT", "tidak"), args...)
+	code = h.run(answers("tidak"), args...)
 	if code != cli.ExitOK || !strings.Contains(h.stdout.String(), "Dibatalkan") || len(h.batches()) != 0 {
 		t.Fatalf("tanpa YAKIN harus batal (%d): %s", code, h.stdout.String())
 	}
-	code = h.run(answers("LANJUT", "YAKIN"), args...)
+	code = h.run(answers("YAKIN"), args...)
 	out = h.stdout.String()
 	if code != cli.ExitOK || !strings.Contains(out, "Ketik YAKIN") || !strings.Contains(out, "tersimpan dengan status PLANNED (2 website)") {
 		t.Fatalf("simpan (%d): %s%s", code, out, h.stderr.String())
@@ -299,7 +300,6 @@ func TestPlanInteractiveWizard(t *testing.T) {
 		"",
 		"2",
 		"1",
-		"LANJUT",
 		"YAKIN",
 		"0",
 	)
@@ -317,7 +317,7 @@ func TestPlanInteractiveWizard(t *testing.T) {
 		"Satu batch hanya untuk satu akun sumber (u494983133)",
 		"Terpilih (u494983133): toko.id, domainanda.com",
 		"Token tujuan:",
-		"1. u73839202  (Business) — sisa kuota website: 99",
+		"1. u73839202  (Business) · 1 web",
 		"RINGKASAN RENCANA",
 		"tersimpan dengan status PLANNED",
 	} {

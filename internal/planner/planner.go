@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"hostinger-migrator/internal/capability"
-	"hostinger-migrator/internal/config"
 	"hostinger-migrator/internal/hostinger"
 	"hostinger-migrator/internal/store"
 )
@@ -22,8 +21,6 @@ const (
 
 	FinalCompleted = "COMPLETED"
 	FinalDummyOnly = "DUMMY_ONLY"
-
-	DiskFactor = 1.3
 )
 
 var ErrRejected = errors.New("rencana ditolak")
@@ -55,13 +52,6 @@ type Item struct {
 	Steps         []string
 }
 
-type Quota struct {
-	Known     bool
-	Limit     int
-	Used      int
-	Remaining int
-}
-
 type Plan struct {
 	Request      Request
 	SourcePlan   string
@@ -72,9 +62,6 @@ type Plan struct {
 	UnknownSize  int
 	DBCount      int
 	MailboxCount int
-	DestQuota    Quota
-	DestDiskFree int64
-	DestDBCount  int
 	CreatedAt    time.Time
 }
 
@@ -119,7 +106,6 @@ func (p *Plan) ActiveItems() []Item {
 
 type Planner struct {
 	Store     *store.Store
-	Quotas    map[string]config.Kuota
 	NewClient func(alias string) (*hostinger.Client, error)
 	Now       func() time.Time
 	MaxInvAge time.Duration
@@ -132,31 +118,12 @@ func (pl *Planner) now() time.Time {
 	return time.Now()
 }
 
-func (pl *Planner) DestQuota(ctx context.Context, alias string, acc store.HostingAccount) (Quota, []hostinger.Website, error) {
+func (pl *Planner) destSites(ctx context.Context, alias string, acc store.HostingAccount) ([]hostinger.Website, error) {
 	client, err := pl.NewClient(alias)
 	if err != nil {
-		return Quota{}, nil, err
+		return nil, err
 	}
-	sites, err := client.ReadOnlyCopy().ListWebsites(ctx, hostinger.WebsiteFilter{Username: acc.ID})
-	if err != nil {
-		return Quota{}, nil, err
-	}
-	used := 0
-	for _, s := range sites {
-		if s.VhostType == "main" || s.VhostType == "addon" {
-			used++
-		}
-	}
-	q := Quota{Used: used}
-	if k, ok := pl.Quotas[acc.Plan]; ok && k.Website > 0 {
-		q.Known = true
-		q.Limit = k.Website
-		q.Remaining = k.Website - used
-		if q.Remaining < 0 {
-			q.Remaining = 0
-		}
-	}
-	return q, sites, nil
+	return client.ReadOnlyCopy().ListWebsites(ctx, hostinger.WebsiteFilter{Username: acc.ID})
 }
 
 func (pl *Planner) Build(ctx context.Context, req Request) (*Plan, error) {
@@ -287,11 +254,10 @@ func (pl *Planner) Build(ctx context.Context, req Request) (*Plan, error) {
 		add("PILIHAN_WEBSITE", CheckOK, fmt.Sprintf("%d website dipilih.", len(p.Items)))
 	}
 
-	quota, destSites, err := pl.DestQuota(ctx, req.DestAlias, dstAcc)
+	destSites, err := pl.destSites(ctx, req.DestAlias, dstAcc)
 	if err != nil {
 		add("BENTROK_DOMAIN", CheckFail, "Tidak bisa membaca website akun tujuan: "+err.Error())
 	} else {
-		p.DestQuota = quota
 		destDomains := map[string]bool{}
 		for _, s := range destSites {
 			destDomains[strings.ToLower(s.Domain)] = true
@@ -338,21 +304,6 @@ func (pl *Planner) Build(ctx context.Context, req Request) (*Plan, error) {
 			}
 		}
 	}
-
-	need := len(activeItems)
-	if err == nil {
-		switch {
-		case !quota.Known:
-			add("KUOTA_WEBSITE", CheckWarn, fmt.Sprintf("Kuota website paket %q tidak diketahui (atur kuota_paket di config.yaml); terpakai %d, dibutuhkan %d.", dstAcc.Plan, quota.Used, need))
-		case quota.Remaining < need:
-			add("KUOTA_WEBSITE", CheckFail, fmt.Sprintf("Sisa kuota website tujuan %d (kuota %d, terpakai %d), dibutuhkan %d.", quota.Remaining, quota.Limit, quota.Used, need))
-		default:
-			add("KUOTA_WEBSITE", CheckOK, fmt.Sprintf("Sisa kuota website tujuan %d, dibutuhkan %d (kuota paket dari config, belum diverifikasi API).", quota.Remaining, need))
-		}
-	}
-
-	pl.diskCheck(ctx, p, dstAcc, add)
-	pl.dbQuotaCheck(ctx, p, dstAcc, add)
 
 	srcSSH, _ := pl.Store.GetSSH(ctx, req.SourceAccount)
 	if srcSSH != nil && srcSSH.Status == store.SSHReady {
@@ -435,59 +386,6 @@ func (pl *Planner) capabilities(ctx context.Context, accountID string) map[strin
 		out[c.Code] = c
 	}
 	return out
-}
-
-func (pl *Planner) diskCheck(ctx context.Context, p *Plan, dst store.HostingAccount, add func(string, string, string)) {
-	need := int64(float64(p.TotalSize) * DiskFactor)
-	caps := pl.capabilities(ctx, dst.ID)
-	free := int64(-1)
-	if c, ok := caps["QUOTA"]; ok && c.DetailJSON != "" {
-		var d map[string]any
-		if json.Unmarshal([]byte(c.DetailJSON), &d) == nil {
-			if v, ok := d["disk_sisa_byte"].(float64); ok {
-				free = int64(v)
-			}
-		}
-	}
-	p.DestDiskFree = free
-	switch {
-	case free < 0:
-		add("DISK_TUJUAN", CheckWarn, fmt.Sprintf("Sisa disk tujuan tidak diketahui (jalankan 'migrator audit %s'); dibutuhkan sekitar %s.", p.Request.DestAlias, HumanBytes(need)))
-	case free < need:
-		add("DISK_TUJUAN", CheckFail, fmt.Sprintf("Sisa disk tujuan %s, dibutuhkan %s (ukuran × %.1f).", HumanBytes(free), HumanBytes(need), DiskFactor))
-	case p.UnknownSize > 0:
-		add("DISK_TUJUAN", CheckWarn, fmt.Sprintf("Sisa disk tujuan %s cukup untuk %s, tetapi ukuran %d website tidak diketahui (tanpa SSH).", HumanBytes(free), HumanBytes(need), p.UnknownSize))
-	default:
-		add("DISK_TUJUAN", CheckOK, fmt.Sprintf("Sisa disk tujuan %s, dibutuhkan %s (ukuran × %.1f, angka df).", HumanBytes(free), HumanBytes(need), DiskFactor))
-	}
-}
-
-func (pl *Planner) dbQuotaCheck(ctx context.Context, p *Plan, dst store.HostingAccount, add func(string, string, string)) {
-	if p.DBCount == 0 {
-		return
-	}
-	limit := pl.Quotas[dst.Plan].Database
-	used := -1
-	caps := pl.capabilities(ctx, dst.ID)
-	if c, ok := caps["API_DB_LIST"]; ok && c.DetailJSON != "" {
-		var d map[string]any
-		if json.Unmarshal([]byte(c.DetailJSON), &d) == nil {
-			if v, ok := d["jumlah_database"].(float64); ok {
-				used = int(v)
-			}
-		}
-	}
-	p.DestDBCount = used
-	switch {
-	case limit <= 0:
-		add("KUOTA_DATABASE", CheckWarn, fmt.Sprintf("Kuota database paket %q tidak diketahui; dibutuhkan %d database baru.", dst.Plan, p.DBCount))
-	case used < 0:
-		add("KUOTA_DATABASE", CheckWarn, fmt.Sprintf("Jumlah database tujuan tidak diketahui (jalankan 'migrator audit'); kuota %d, dibutuhkan %d.", limit, p.DBCount))
-	case limit-used < p.DBCount:
-		add("KUOTA_DATABASE", CheckFail, fmt.Sprintf("Sisa kuota database tujuan %d, dibutuhkan %d.", limit-used, p.DBCount))
-	default:
-		add("KUOTA_DATABASE", CheckOK, fmt.Sprintf("Sisa kuota database tujuan %d, dibutuhkan %d.", limit-used, p.DBCount))
-	}
 }
 
 func capNote(caps map[string]store.Capability, code, manual string) string {

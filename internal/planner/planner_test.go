@@ -3,13 +3,11 @@ package planner
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"hostinger-migrator/internal/config"
 	"hostinger-migrator/internal/hostinger"
 	"hostinger-migrator/internal/store"
 	"hostinger-migrator/tests/fakehostinger"
@@ -78,12 +76,9 @@ func newFixture(t *testing.T, destPlan string) *fixture {
 		{Code: "API_DB_LIST", Status: "SUPPORTED", DetailJSON: `{"jumlah_database": 2}`},
 		{Code: "API_CREATE_WEBSITE", Status: "UNKNOWN"},
 	})
-	cfg, _ := config.Default()
-	cfg.KuotaPaket["hostinger_business"] = config.Kuota{Website: 100, Database: 100}
 	pl := &Planner{
-		Store:  st,
-		Quotas: cfg.KuotaPaket,
-		Now:    func() time.Time { return time.Date(2026, 11, 22, 11, 0, 0, 0, time.UTC) },
+		Store: st,
+		Now:   func() time.Time { return time.Date(2026, 11, 22, 11, 0, 0, 0, time.UTC) },
 		NewClient: func(alias string) (*hostinger.Client, error) {
 			tok := srcToken
 			if alias == "zyx" {
@@ -117,15 +112,6 @@ func TestPlanHappyPathAndSave(t *testing.T) {
 	}
 	if p.Rejected() {
 		t.Fatalf("ditolak: %+v", p.Failures())
-	}
-	if c := check(p, "KUOTA_WEBSITE"); c.Status != CheckOK || !strings.Contains(c.Message, "Sisa kuota website tujuan 98, dibutuhkan 3") {
-		t.Fatalf("kuota = %+v", c)
-	}
-	if c := check(p, "DISK_TUJUAN"); c.Status != CheckOK {
-		t.Fatalf("disk = %+v", c)
-	}
-	if c := check(p, "KUOTA_DATABASE"); c.Status != CheckOK {
-		t.Fatalf("kuota db = %+v", c)
 	}
 	if p.DBCount != 2 || p.MailboxCount != 1 || p.TotalSize != (1<<30)+(500<<20)+(1<<20)+(60<<20) {
 		t.Fatalf("total = %d db %d mail %d", p.TotalSize, p.DBCount, p.MailboxCount)
@@ -167,39 +153,21 @@ func TestPlanHappyPathAndSave(t *testing.T) {
 	}
 }
 
-func TestPlanRejectedWhenQuotaInsufficient(t *testing.T) {
+func TestPlanIgnoresCapacity(t *testing.T) {
 	f := newFixture(t, "hostinger_single")
 	ctx := context.Background()
+	f.st.SaveCapabilities(ctx, "u73839202", []store.Capability{{Code: "QUOTA", Status: "UNKNOWN", DetailJSON: `{"disk_sisa_byte": 1048576}`}})
 	p, err := f.pl.Build(ctx, req("domainanda.com"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := check(p, "KUOTA_WEBSITE")
-	if c.Status != CheckFail || !strings.Contains(c.Message, "Sisa kuota website tujuan 0 (kuota 1, terpakai 2), dibutuhkan 1") {
-		t.Fatalf("kuota = %+v", c)
-	}
-	if !p.Rejected() {
-		t.Fatal("rencana harus ditolak")
-	}
-	if _, err := f.pl.Save(ctx, p); !errors.Is(err, ErrRejected) {
-		t.Fatalf("err = %v", err)
-	}
-	if bs, _ := f.st.ListBatches(ctx); len(bs) != 0 {
-		t.Fatal("rencana ditolak tidak boleh tersimpan")
-	}
-}
-
-func TestPlanUnknownPlanQuotaIsWarning(t *testing.T) {
-	f := newFixture(t, "hostinger_cloud_x")
-	p, _ := f.pl.Build(context.Background(), req("domainanda.com"))
-	if c := check(p, "KUOTA_WEBSITE"); c.Status != CheckWarn || !strings.Contains(c.Message, "tidak diketahui") {
-		t.Fatalf("kuota = %+v", c)
-	}
-	if c := check(p, "KUOTA_DATABASE"); c.Status != CheckWarn {
-		t.Fatalf("kuota db = %+v", c)
-	}
 	if p.Rejected() {
-		t.Fatalf("peringatan saja tidak boleh menolak: %+v", p.Failures())
+		t.Fatalf("kapasitas tujuan tidak boleh menolak rencana: %+v", p.Failures())
+	}
+	for _, code := range []string{"KUOTA_WEBSITE", "DISK_TUJUAN", "KUOTA_DATABASE"} {
+		if c := check(p, code); c.Code != "" {
+			t.Errorf("%s masih diperiksa: %+v", code, c)
+		}
 	}
 }
 
@@ -224,15 +192,6 @@ func TestPlanDomainConflict(t *testing.T) {
 	p2, _ := f.pl.Build(context.Background(), req("toko.id"))
 	if check(p2, "BENTROK_DOMAIN").Status != CheckFail || !p2.Rejected() {
 		t.Fatalf("semua bentrok harus ditolak: %+v", p2.Checks)
-	}
-}
-
-func TestPlanDiskInsufficient(t *testing.T) {
-	f := newFixture(t, "hostinger_business")
-	f.st.SaveCapabilities(context.Background(), "u73839202", []store.Capability{{Code: "QUOTA", Status: "UNKNOWN", DetailJSON: `{"disk_sisa_byte": 1048576}`}})
-	p, _ := f.pl.Build(context.Background(), req("domainanda.com"))
-	if c := check(p, "DISK_TUJUAN"); c.Status != CheckFail || !p.Rejected() {
-		t.Fatalf("disk = %+v", c)
 	}
 }
 

@@ -435,7 +435,7 @@ func (e *Env) Inventory() {
 
 func (e *Env) Plan(domains ...string) string {
 	e.T.Helper()
-	pl := &planner.Planner{Store: e.Store, Quotas: e.Config.KuotaPaket, NewClient: e.Client}
+	pl := &planner.Planner{Store: e.Store, NewClient: e.Client}
 	p, err := pl.Build(context.Background(), planner.Request{SourceAlias: SrcAlias, SourceAccount: SrcAccount, Domains: domains, DestAlias: DstAlias, DestAccount: DstAccount})
 	if err != nil {
 		e.T.Fatal(err)

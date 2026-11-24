@@ -46,7 +46,7 @@ func newPlanCmd(app *App) *cobra.Command {
 }
 
 func (a *App) planner() *planner.Planner {
-	return &planner.Planner{Store: a.store, Quotas: a.cfg.KuotaPaket, NewClient: a.tokenClient, Now: a.env.Now}
+	return &planner.Planner{Store: a.store, NewClient: a.tokenClient, Now: a.env.Now}
 }
 
 func (a *App) chooseAlias(ctx context.Context, role string) (string, error) {
@@ -373,33 +373,18 @@ func (a *App) chooseDestAccount(ctx context.Context, alias, sourceAccount string
 	if len(options) == 0 {
 		return "", needsAction(fmt.Errorf("token %s tidak memiliki akun hosting tujuan selain akun sumber", alias))
 	}
-	pl := a.planner()
-	byID := map[string]store.HostingAccount{}
+	byID := map[string]string{}
 	var ids []string
 	for _, acc := range options {
-		byID[acc.ID] = acc
+		byID[acc.ID] = fmt.Sprintf("(%s) · %d web", PlanLabel(acc.Plan), acc.WebsiteCount)
 		ids = append(ids, acc.ID)
 	}
 	items, err := a.accountChoices(ctx, ids)
 	if err != nil {
 		return "", err
 	}
-	describe := func(id string) string {
-		acc := byID[id]
-		label := "sisa kuota website: ?"
-		if q, _, err := pl.DestQuota(ctx, alias, acc); err == nil {
-			if q.Known {
-				label = fmt.Sprintf("sisa kuota website: %d", q.Remaining)
-			} else {
-				label = fmt.Sprintf("kuota website tidak diketahui, terpakai %d", q.Used)
-			}
-		} else {
-			label = "kuota tidak terbaca: " + a.redactor.String(err.Error())
-		}
-		return fmt.Sprintf("(%s) — %s", PlanLabel(acc.Plan), label)
-	}
 	a.printf("Ditemukan %d akun di token %s:\n", len(options), alias)
-	return a.chooseAccountFrom(items, "Pilih salah satu (nomor, id, atau kata kunci): ", false, describe)
+	return a.chooseAccountFrom(items, "Pilih salah satu (nomor, id, atau kata kunci): ", false, func(id string) string { return byID[id] })
 }
 
 func checkTag(status string) string {
