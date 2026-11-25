@@ -387,13 +387,23 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`public\s+\$(?:password|secret)\s*=\s*(?:'([^']*)'|"([^"]*)")`),
 }
 
+var envReference = regexp.MustCompile(`^\$\{[A-Za-z_][A-Za-z0-9_]*\}$`)
+
+func trivialValue(s string) bool {
+	switch strings.ToLower(s) {
+	case "true", "false", "null", "none":
+		return true
+	}
+	return envReference.MatchString(s)
+}
+
 func ExtractSecrets(content string) []string {
 	var out []string
 	for _, re := range secretPatterns {
 		for _, m := range re.FindAllStringSubmatch(content, -1) {
 			for _, g := range m[1:] {
 				g = strings.TrimSpace(g)
-				if len(g) >= 4 {
+				if len(g) >= 4 && !trivialValue(g) {
 					out = append(out, g)
 				}
 			}
