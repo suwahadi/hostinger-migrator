@@ -241,8 +241,14 @@ func (r *Runner) load(ctx context.Context, it *store.PipelineItem) (*ItemContext
 		if err != nil {
 			return nil, err
 		}
+		skipped := map[string]bool{}
+		if names, err := SkippedDatabases(ctx, r.Store, it); err == nil {
+			for _, n := range names {
+				skipped[n] = true
+			}
+		}
 		for _, d := range dbs {
-			if d.WebsiteDomain == w.Domain {
+			if d.WebsiteDomain == w.Domain && !skipped[d.Name] {
 				ic.Databases = append(ic.Databases, d)
 			}
 		}
@@ -593,26 +599,38 @@ func (r *Runner) RunBackup(ctx context.Context, ic *ItemContext, final bool) (*b
 		return nil, err
 	}
 	m, err := r.Backup.Run(ctx, c, ic.Item, ic.Website, ic.Databases, final)
-	return m, backupManual(err, ic)
+	usedSSH := false
+	if run, rerr := r.Store.GetInventoryRun(ctx, ic.Batch.SourceAccount, ic.Batch.SourceAlias); rerr == nil {
+		usedSSH = run.SSHUsed
+	}
+	return m, backupManual(err, ic, usedSSH)
 }
 
-func backupManual(err error, ic *ItemContext) error {
+func unknownSource(d store.DatabaseRow) bool {
+	return d.Source == "" || d.Source == "api"
+}
+
+func backupManual(err error, ic *ItemContext, inventoryUsedSSH bool) error {
 	if !errors.Is(err, backup.ErrUnknownDBSource) {
 		return err
 	}
 	var unknown []string
 	for _, d := range ic.Databases {
-		if d.Source == "" || d.Source == "api" {
+		if unknownSource(d) {
 			unknown = append(unknown, d.Name)
 		}
 	}
 	db, domain, acc := strings.Join(unknown, ", "), ic.Item.SourceDomain, ic.Batch.SourceAccount
-	return &ManualError{Code: "MANUAL_DB_SOURCE", Instructions: fmt.Sprintf("Password database %s untuk %s tidak bisa dibaca karena file konfigurasinya belum diketahui.\n"+
-		"Penyebab paling umum: inventaris akun %s dibuat sebelum SSH siap, sehingga file konfigurasi website tidak dibaca.\n"+
+	reason := fmt.Sprintf("Penyebab paling umum: inventaris akun %s dibuat sebelum SSH siap, sehingga file konfigurasi website tidak dibaca.", acc)
+	if inventoryUsedSSH {
+		reason = fmt.Sprintf("Inventaris akun %s sudah memakai SSH, tetapi tidak ada file konfigurasi website yang merujuk database ini. Kemungkinan database ini tidak dipakai (mis. sisa instalasi lama).", acc)
+	}
+	return &ManualError{Code: "MANUAL_DB_SOURCE", Instructions: fmt.Sprintf("Password database %s untuk %s tidak bisa dibaca karena file konfigurasinya belum diketahui.\n%s\n"+
 		"1. Pindai ulang akun: migrator inventory --akun %s --refresh (atau menu 3, pindai ulang, pilih akun ini)\n"+
 		"2. Lanjutkan: migrator confirm MANUAL_DB_SOURCE %s\n"+
-		"Bila tindakan ini muncul lagi setelah pindai ulang, website memakai file konfigurasi yang tidak dikenali tool. Catat nama file konfigurasinya dan laporkan ke pengembang.",
-		db, domain, acc, acc, domain)}
+		"3. Bila database ini tidak dipakai website, lewati: migrator confirm MANUAL_DB_SOURCE %s --nilai lewati. Database yang dilewati tidak dipindah dan kemungkinan ikut terhapus saat cleanup website sumber.\n"+
+		"Bila website memakai database ini tetapi tindakan ini muncul lagi setelah pindai ulang, file konfigurasinya tidak dikenali tool; catat nama filenya dan laporkan ke pengembang.",
+		db, domain, reason, acc, domain, domain)}
 }
 
 func (r *Runner) hProvision(ctx context.Context, ic *ItemContext) (string, error) {

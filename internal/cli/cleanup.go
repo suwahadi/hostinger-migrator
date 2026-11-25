@@ -104,11 +104,7 @@ func (a *App) runCleanup(ctx context.Context, batchID string, includeDummy bool,
 		if len(pass)+len(dummies) > 0 {
 			a.say(toneDanger, "Lolos gerbang (website + database di akun sumber akan DIHAPUS, domain tidak dihapus):")
 			for _, it := range append(pass, dummies...) {
-				target := it.SourceTempDomain
-				if target == "" {
-					target = it.SourceDomain
-				}
-				a.printf("  - %s (website sumber: %s)\n", it.SourceDomain, target)
+				a.printCleanupItem(ctx, it)
 			}
 		}
 		if len(held) > 0 {
@@ -215,5 +211,16 @@ func (a *App) autoReport(ctx context.Context, batchID string) {
 	files, err := rb.Write(rep, filepath.Join(a.dataDir, "reports", batchID), map[string]bool{"html": true, "json": true, "csv": true})
 	if err == nil && a.log != nil {
 		a.log.Info("laporan otomatis dibuat", "batch", batchID, "file", strings.Join(files, ", "), "waktu", time.Now().UTC().Format(time.RFC3339))
+	}
+}
+
+func (a *App) printCleanupItem(ctx context.Context, it *store.PipelineItem) {
+	target := it.SourceTempDomain
+	if target == "" {
+		target = it.SourceDomain
+	}
+	a.printf("  - %s (website sumber: %s)\n", it.SourceDomain, target)
+	if skipped, _ := pipeline.SkippedDatabases(ctx, a.store, it); len(skipped) > 0 {
+		a.say(toneDanger, fmt.Sprintf("    database dilewati: %s (kemungkinan ikut terhapus bersama website sumber)", strings.Join(skipped, ", ")))
 	}
 }

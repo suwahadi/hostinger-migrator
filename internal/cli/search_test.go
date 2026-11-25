@@ -2,11 +2,13 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 
+	"hostinger-migrator/internal/pipeline"
 	"hostinger-migrator/internal/store"
 )
 
@@ -175,6 +177,35 @@ func TestPlanHelpOmitsCapacityChecks(t *testing.T) {
 	for _, gone := range []string{"kuota website", "disk", "kuota database"} {
 		if strings.Contains(out.String(), gone) {
 			t.Errorf("bantuan plan masih menyebut %q", gone)
+		}
+	}
+}
+
+func TestCleanupLineShowsSkippedDatabase(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	addTestAccount(t, st, "a", "u1")
+	if err := st.SaveInventory(ctx, &store.InventorySnapshot{AccountID: "u1", Alias: "a",
+		Websites:  []store.Website{{Domain: "a.com", UnitPath: "/home/u1/domains/a.com", VhostType: "main", IsEnabled: true, SizeBytes: -1, FileCount: -1}},
+		Databases: []store.DatabaseRow{{WebsiteDomain: "a.com", Name: "u1_x", Source: "api", InAPI: true}}}); err != nil {
+		t.Fatal(err)
+	}
+	id, err := st.CreateBatch(ctx, store.Batch{SourceAlias: "a", SourceAccount: "u1", DestAlias: "b", DestAccount: "u2"}, []store.Item{{SourceDomain: "a.com", State: "CLEANUP_READY"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	it, _ := st.FindItem(ctx, "a.com", id)
+	st.OpenManualTask(ctx, it.ID, "MANUAL_DB_SOURCE", "x")
+	if _, err := pipeline.Confirm(ctx, st, "MANUAL_DB_SOURCE", "a.com", id, "lewati"); err != nil {
+		t.Fatal(err)
+	}
+	out := &bytes.Buffer{}
+	a := newApp(Env{Stdout: out})
+	a.store, a.colorOut = st, true
+	a.printCleanupItem(ctx, it)
+	for _, want := range []string{"  - a.com (website sumber: a.com)", "\x1b[91m    database dilewati: u1_x (kemungkinan ikut terhapus bersama website sumber)\x1b[0m"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("tidak memuat %q:\n%q", want, out.String())
 		}
 	}
 }

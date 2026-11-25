@@ -320,7 +320,7 @@ func (pl *Planner) Build(ctx context.Context, req Request) (*Plan, error) {
 			}
 		}
 		if len(unknown) > 0 {
-			add("KREDENSIAL_DB", CheckWarn, fmt.Sprintf("Sumber password database belum diketahui: %s. Jalankan 'migrator inventory --akun %s --refresh' sebelum migrasi; tanpa itu backup berhenti di tindakan manual MANUAL_DB_SOURCE.", strings.Join(unknown, ", "), req.SourceAccount))
+			add("KREDENSIAL_DB", CheckWarn, fmt.Sprintf("Sumber password database belum diketahui: %s. Jalankan 'migrator inventory --akun %s --refresh' sebelum migrasi; tanpa itu backup berhenti di tindakan manual MANUAL_DB_SOURCE. Database yang tidak dipakai website bisa dilewati saat tindakan manual MANUAL_DB_SOURCE muncul.", strings.Join(unknown, ", "), req.SourceAccount))
 		}
 	} else {
 		status := store.SSHNotConfigured

@@ -25,8 +25,28 @@ func Confirm(ctx context.Context, st *store.Store, code, domain, batchID, value 
 	if t.Status != store.ManualOpen {
 		return nil, fmt.Errorf("tindakan manual %s untuk %s sudah dikonfirmasi pada %s", code, domain, t.ConfirmedAt)
 	}
+	skip := false
+	if code == codeDBSource {
+		value = strings.TrimSpace(value)
+		switch {
+		case value == "":
+		case strings.EqualFold(value, skipValue):
+			value, skip = skipValue, true
+		default:
+			return nil, fmt.Errorf("nilai %s hanya boleh kosong atau '%s'", codeDBSource, skipValue)
+		}
+	}
 	if err := st.ConfirmManualTask(ctx, it.ID, code, value); err != nil {
 		return nil, err
+	}
+	if skip {
+		names, err := unknownDatabases(ctx, st, it)
+		if err != nil {
+			return nil, err
+		}
+		if err := st.AppendAudit(ctx, nil, "operator", "item.db_skipped", it.SourceDomain, "OK", strings.Join(names, ", ")); err != nil {
+			return nil, err
+		}
 	}
 	return st.UpdateItem(ctx, it.ID, "operator", "item.resume", func(x *store.PipelineItem) error {
 		if x.SideState == store.SideWaitingManual && x.ManualCode == code {
@@ -64,4 +84,41 @@ func Retry(ctx context.Context, st *store.Store, batchID, domain string, include
 		out = append(out, it.SourceDomain)
 	}
 	return out, nil
+}
+
+const (
+	codeDBSource = "MANUAL_DB_SOURCE"
+	skipValue    = "lewati"
+)
+
+func unknownDatabases(ctx context.Context, st *store.Store, it *store.PipelineItem) ([]string, error) {
+	b, _, err := st.GetBatch(ctx, it.BatchID)
+	if err != nil {
+		return nil, err
+	}
+	dbs, err := st.ListDatabasesByAccount(ctx, b.SourceAccount)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, d := range dbs {
+		if d.WebsiteDomain == it.SourceDomain && unknownSource(d) {
+			out = append(out, d.Name)
+		}
+	}
+	return out, nil
+}
+
+func SkippedDatabases(ctx context.Context, st *store.Store, it *store.PipelineItem) ([]string, error) {
+	t, err := st.GetManualTask(ctx, it.ID, codeDBSource)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if t.Status != store.ManualConfirmed || t.Value != skipValue {
+		return nil, nil
+	}
+	return unknownDatabases(ctx, st, it)
 }

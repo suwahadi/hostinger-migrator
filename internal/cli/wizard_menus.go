@@ -74,6 +74,11 @@ func (a *App) manualMenu(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+		} else if t.Code == "MANUAL_DB_SOURCE" {
+			value, err = a.prompt.Line("Ketik lewati bila database tidak dipakai website, atau ENTER setelah pindai ulang: ")
+			if err != nil {
+				return err
+			}
 		}
 		ok, err := a.prompt.Confirm(a.color(toneOK, fmt.Sprintf("Yakin %s untuk %s sudah selesai dikerjakan? (y/T): ", t.Code, t.Domain)), "y")
 		if err != nil {
