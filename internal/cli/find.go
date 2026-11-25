@@ -17,6 +17,14 @@ type foundSite struct {
 	Aliases []string
 }
 
+type siteData struct {
+	Sites  []foundSite
+	Local  int
+	API    int
+	Missed int
+	Warns  []string
+}
+
 func (a *App) remoteWebsites(ctx context.Context, alias string) ([]hostinger.Website, error) {
 	c, err := a.tokenClient(alias)
 	if err != nil {
@@ -25,10 +33,10 @@ func (a *App) remoteWebsites(ctx context.Context, alias string) ([]hostinger.Web
 	return c.ReadOnlyCopy().ListWebsites(ctx, hostinger.WebsiteFilter{})
 }
 
-func (a *App) collectSites(ctx context.Context, remote func(ctx context.Context, alias string) ([]hostinger.Website, error)) ([]foundSite, int, int, []string, error) {
+func (a *App) collectSites(ctx context.Context, remote func(ctx context.Context, alias string) ([]hostinger.Website, error)) (*siteData, error) {
 	accs, err := a.store.ListHostingAccounts(ctx, "")
 	if err != nil {
-		return nil, 0, 0, nil, err
+		return nil, err
 	}
 	aliases := map[string][]string{}
 	scanned := map[string]bool{}
@@ -52,7 +60,7 @@ func (a *App) collectSites(ctx context.Context, remote func(ctx context.Context,
 		if scanned[id] {
 			ws, err := a.store.ListWebsites(ctx, id)
 			if err != nil {
-				return nil, 0, 0, nil, err
+				return nil, err
 			}
 			for _, w := range ws {
 				add(w.Domain, id, w.VhostType)
@@ -63,18 +71,22 @@ func (a *App) collectSites(ctx context.Context, remote func(ctx context.Context,
 			unscanned[al] = append(unscanned[al], id)
 		}
 	}
-	var warns []string
 	tokens := make([]string, 0, len(unscanned))
 	for al := range unscanned {
 		tokens = append(tokens, al)
 	}
 	sort.Strings(tokens)
+	fetched := map[string]bool{}
+	failed := map[string]string{}
 	for _, al := range tokens {
 		a.printf("Mengambil daftar website token %s dari API...\n", al)
 		list, err := remote(ctx, al)
 		if err != nil {
-			warns = append(warns, fmt.Sprintf("Token %s: daftar website tidak bisa diambil (%s); akun yang belum dipindai di token ini tidak ikut dicari.", al, a.redactor.String(err.Error())))
+			failed[al] = a.redactor.String(err.Error())
 			continue
+		}
+		for _, id := range unscanned[al] {
+			fetched[id] = true
 		}
 		for _, w := range list {
 			if slices.Contains(unscanned[al], w.Username) {
@@ -82,20 +94,36 @@ func (a *App) collectSites(ctx context.Context, remote func(ctx context.Context,
 			}
 		}
 	}
-	sites := make([]foundSite, 0, len(byKey))
+	d := &siteData{Local: len(scanned), API: len(fetched), Missed: len(aliases) - len(scanned) - len(fetched)}
+	for _, al := range tokens {
+		reason, ok := failed[al]
+		if !ok {
+			continue
+		}
+		missed := 0
+		for _, id := range unscanned[al] {
+			if !fetched[id] {
+				missed++
+			}
+		}
+		if missed == 0 {
+			d.Warns = append(d.Warns, fmt.Sprintf("Token %s: daftar website tidak bisa diambil (%s); semua akunnya terambil lewat token lain.", al, reason))
+		} else {
+			d.Warns = append(d.Warns, fmt.Sprintf("Token %s: daftar website tidak bisa diambil (%s); %d akun yang belum dipindai di token ini tidak ikut dicari.", al, reason, missed))
+		}
+	}
 	for _, s := range byKey {
 		s.Aliases = append([]string(nil), aliases[s.Account]...)
 		sort.Strings(s.Aliases)
-		sites = append(sites, *s)
+		d.Sites = append(d.Sites, *s)
 	}
-	sort.Slice(sites, func(i, j int) bool {
-		if sites[i].Domain != sites[j].Domain {
-			return sites[i].Domain < sites[j].Domain
+	sort.Slice(d.Sites, func(i, j int) bool {
+		if d.Sites[i].Domain != d.Sites[j].Domain {
+			return d.Sites[i].Domain < d.Sites[j].Domain
 		}
-		return sites[i].Account < sites[j].Account
+		return d.Sites[i].Account < d.Sites[j].Account
 	})
-	apiAccounts := len(aliases) - len(scanned)
-	return sites, len(scanned), apiAccounts, warns, nil
+	return d, nil
 }
 
 func matchFound(sites []foundSite, query string) []foundSite {
@@ -119,13 +147,17 @@ func foundLine(n int, s foundSite) string {
 }
 
 func (a *App) findWebsiteMenu(ctx context.Context) error {
+	return a.findWebsiteMenuWith(ctx, a.remoteWebsites)
+}
+
+func (a *App) findWebsiteMenuWith(ctx context.Context, remote func(ctx context.Context, alias string) ([]hostinger.Website, error)) error {
 	a.say(toneTitle, "CARI WEBSITE")
-	sites, local, api, warns, err := a.collectSites(ctx, a.remoteWebsites)
+	d, err := a.collectSites(ctx, remote)
 	if err != nil {
 		return err
 	}
-	a.println(fmt.Sprintf("Data: %d akun dari inventaris lokal, %d akun dari API (%d website).", local, api, len(sites)))
-	for _, w := range warns {
+	a.println(fmt.Sprintf("Data: %d akun dari inventaris lokal, %d akun dari API (%d website).", d.Local, d.API, len(d.Sites)))
+	for _, w := range d.Warns {
 		a.say(toneWarn, w)
 	}
 	a.println()
@@ -144,7 +176,7 @@ func (a *App) findWebsiteMenu(ctx context.Context) error {
 		}
 		a.clearScreen()
 		a.say(toneTitle, "CARI WEBSITE")
-		hits := matchFound(sites, v)
+		hits := matchFound(d.Sites, v)
 		if len(hits) == 0 {
 			a.say(toneWarn, fmt.Sprintf("Tidak ada website yang cocok dengan %q.", v))
 		} else {
@@ -156,6 +188,9 @@ func (a *App) findWebsiteMenu(ctx context.Context) error {
 			if len(hits) > len(shown) {
 				a.say(toneWarn, fmt.Sprintf("Menampilkan %d dari %d. Persempit kata kunci.", len(shown), len(hits)))
 			}
+		}
+		if d.Missed > 0 {
+			a.say(toneWarn, fmt.Sprintf("Catatan: %d akun yang belum dipindai tidak ikut dicari karena API gagal.", d.Missed))
 		}
 		a.println()
 		a.println("[0] Kembali ke menu utama")
