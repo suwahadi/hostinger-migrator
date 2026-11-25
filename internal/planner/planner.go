@@ -308,6 +308,20 @@ func (pl *Planner) Build(ctx context.Context, req Request) (*Plan, error) {
 	srcSSH, _ := pl.Store.GetSSH(ctx, req.SourceAccount)
 	if srcSSH != nil && srcSSH.Status == store.SSHReady {
 		add("SSH_SUMBER", CheckOK, fmt.Sprintf("SSH sumber %s siap.", req.SourceAccount))
+		var unknown []string
+		for _, it := range p.Items {
+			if it.Blocked {
+				continue
+			}
+			for _, d := range it.Databases {
+				if d.Source == "" || d.Source == "api" {
+					unknown = append(unknown, fmt.Sprintf("%s (%s)", it.Website.Domain, d.Name))
+				}
+			}
+		}
+		if len(unknown) > 0 {
+			add("KREDENSIAL_DB", CheckWarn, fmt.Sprintf("Sumber password database belum diketahui: %s. Jalankan 'migrator inventory --akun %s --refresh' sebelum migrasi; tanpa itu backup berhenti di tindakan manual MANUAL_DB_SOURCE.", strings.Join(unknown, ", "), req.SourceAccount))
+		}
 	} else {
 		status := store.SSHNotConfigured
 		if srcSSH != nil {

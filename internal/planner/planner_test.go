@@ -65,8 +65,8 @@ func newFixture(t *testing.T, destPlan string) *fixture {
 		{Domain: "toko.id", UnitPath: "/home/u494983133/domains/toko.id", VhostType: "addon", SiteType: "Laravel", SizeBytes: 500 << 20, FileCount: 10, SizeSource: store.SizeFromSSH, DomainStatus: store.DomainActive, IsEnabled: true, NSExternal: boolp(true), Nameservers: []string{"ana.ns.cloudflare.com"}},
 		{Domain: "mati.com", UnitPath: "/home/u494983133/domains/mati.com", VhostType: "addon", SiteType: "Statis", SizeBytes: 1 << 20, FileCount: 3, SizeSource: store.SizeFromSSH, DomainStatus: store.DomainExpired, IsEnabled: true},
 	}, Databases: []store.DatabaseRow{
-		{WebsiteDomain: "domainanda.com", Name: "u494983133_wp", SizeBytes: 50 << 20, InAPI: true},
-		{WebsiteDomain: "toko.id", Name: "u494983133_toko", SizeBytes: 10 << 20},
+		{WebsiteDomain: "domainanda.com", Name: "u494983133_wp", SizeBytes: 50 << 20, InAPI: true, Source: "public_html/wp-config.php"},
+		{WebsiteDomain: "toko.id", Name: "u494983133_toko", SizeBytes: 10 << 20, Source: ".env"},
 	}, Mailboxes: []store.MailboxRow{{Domain: "domainanda.com", Address: "info@domainanda.com", MessageCount: 10}}}
 	if err := st.SaveInventory(ctx, snap); err != nil {
 		t.Fatal(err)
@@ -243,5 +243,31 @@ func TestPlanRejectedTokenAndSameAccount(t *testing.T) {
 	p, _ = f.pl.Build(ctx, r)
 	if check(p, "AKUN_BERBEDA").Status != CheckFail {
 		t.Fatalf("akun sama = %+v", p.Checks)
+	}
+}
+
+func TestPlanWarnsUnknownDBSource(t *testing.T) {
+	f := newFixture(t, "hostinger_business")
+	ctx := context.Background()
+	if p, _ := f.pl.Build(ctx, req("domainanda.com", "toko.id")); check(p, "KREDENSIAL_DB").Code != "" {
+		t.Fatalf("semua sumber diketahui, tidak boleh ada peringatan: %+v", check(p, "KREDENSIAL_DB"))
+	}
+	if _, err := f.st.DB().ExecContext(ctx, "UPDATE databases SET source = 'api' WHERE name = 'u494983133_toko'"); err != nil {
+		t.Fatal(err)
+	}
+	p, err := f.pl.Build(ctx, req("domainanda.com", "toko.id"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := check(p, "KREDENSIAL_DB")
+	if c.Status != CheckWarn || !strings.Contains(c.Message, "toko.id (u494983133_toko)") || !strings.Contains(c.Message, "--akun u494983133 --refresh") || strings.Contains(c.Message, "domainanda.com") {
+		t.Fatalf("peringatan = %+v", c)
+	}
+	if p.Rejected() {
+		t.Fatalf("peringatan tidak boleh menolak: %+v", p.Failures())
+	}
+	f.st.SaveSSH(ctx, store.SSHInfo{AccountID: "u494983133", Host: "1.2.3.4", Port: 65002, User: "u494983133", Fingerprint: "SHA256:x", Status: store.SSHFailed, Auth: store.SSHAuthKey})
+	if p, _ := f.pl.Build(ctx, req("domainanda.com", "toko.id")); check(p, "KREDENSIAL_DB").Code != "" {
+		t.Fatalf("SSH sumber tidak siap: backup manual, tidak butuh password: %+v", check(p, "KREDENSIAL_DB"))
 	}
 }
