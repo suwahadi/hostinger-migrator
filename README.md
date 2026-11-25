@@ -56,11 +56,14 @@ MENU UTAMA — HOSTINGER MIGRATION MANAGER
  9. Bersihkan akun sumber (cleanup)
 10. Laporan
 11. Kendali worker & pemulihan
+12. Cari website
  0. Keluar
 Pilih:
 ```
 
 Di jendela konsol dan Git Bash, layar dibersihkan setiap pindah menu dan hasil tindakan tampil sampai Anda menekan ENTER. Warna membantu membaca: judul biru, sukses dan konfirmasi hijau, hapus dan error merah, peringatan kuning. Output yang dialihkan ke file tetap polos.
+
+Menu 12 (Cari website) menunjukkan sebuah domain ada di akun dan token mana. Akun yang sudah dipindai inventaris dicari dari data lokal; akun yang belum dipindai diambil sekali dari API (hanya baca) saat menu dibuka. Ketik sebagian domain lalu ENTER, `0` untuk kembali.
 
 Keluar dari wizard tidak menghentikan worker yang sedang berjalan di background. Bila terjadi error saat program dibuka (mis. `config.yaml` salah), jendela menunggu ENTER agar pesan sempat dibaca.
 

@@ -23,6 +23,7 @@ var mainMenu = []menuEntry{
 	{"9", "Bersihkan akun sumber (cleanup)"},
 	{"10", "Laporan"},
 	{"11", "Kendali worker & pemulihan"},
+	{"12", "Cari website"},
 }
 
 const bannerWidth = 34
@@ -104,6 +105,9 @@ func (a *App) runWizard(ctx context.Context) error {
 		case "11":
 			pause = false
 			actionErr = a.workerMenu(ctx)
+		case "12":
+			pause = false
+			actionErr = a.findWebsiteMenu(ctx)
 		default:
 			a.say(toneWarn, "Pilihan tidak dikenal.")
 		}
