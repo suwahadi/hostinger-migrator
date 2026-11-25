@@ -2,7 +2,7 @@
 
 Alat baris perintah (CLI) untuk memindahkan website beserta layanan terkait — file, database, DNS, SSL, dan email — dari satu akun Hostinger Shared Hosting ke akun Hostinger lain secara otomatis, aman, bisa dilanjutkan setelah gangguan, dan menghasilkan laporan lengkap dalam bahasa Indonesia.
 
-> **Status: v1.0.0-rc9.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
+> **Status: v1.0.0-rc10.** Semua fase PRD (0–8) selesai di sisi kode dan lulus pengujian otomatis memakai server tiruan (Hostinger tidak menyediakan sandbox). **Belum diuji di akun Hostinger nyata.** Ikuti [`docs/uji-lapangan.md`](docs/uji-lapangan.md) di akun uji sebelum dipakai untuk website klien.
 
 ---
 
@@ -37,7 +37,7 @@ Tampilan awal wizard:
 
  Nama Program : Hostinger Migrator
  Pembuat      : Suwahadi
- Versi        : 1.0.0-rc9
+ Versi        : 1.0.0-rc10
  Platform     : Windows 10/11 64bit
 
 ==================================
@@ -101,7 +101,7 @@ Kolom **Menu** adalah nomor di wizard; kolom **Perintah** untuk yang lebih suka 
 | Kode | Kapan muncul | Yang dikerjakan operator |
 |---|---|---|
 | `MANUAL_BACKUP` | SSH sumber tidak tersedia | Unduh backup file + DB dari hPanel ke folder yang ditunjukkan |
-| `MANUAL_DB_SOURCE` | Password database tidak bisa dibaca karena file konfigurasinya belum diketahui (biasanya inventaris dibuat sebelum SSH siap) | `migrator inventory --akun <akun> --refresh`, lalu `confirm MANUAL_DB_SOURCE <domain>` |
+| `MANUAL_DB_SOURCE` | Password database tidak bisa dibaca karena file konfigurasinya belum diketahui (biasanya inventaris dibuat sebelum SSH siap) | `migrator inventory --akun <akun> --refresh`, lalu `confirm MANUAL_DB_SOURCE <domain>`. Bila database tidak dipakai website: `confirm MANUAL_DB_SOURCE <domain> --nilai lewati` (database tidak dipindah dan kemungkinan ikut terhapus saat cleanup) |
 | `MANUAL_CREATE_SITE` | API menolak membuat website dummy | Buat website kosong di hPanel tujuan, `confirm ... --nilai <domain-sementara>` |
 | `MANUAL_CREATE_DB` | API menolak membuat database | Buat DB dengan nama/user yang ditampilkan; password: `migrator pending --tampilkan-rahasia` |
 | `MANUAL_PHP` | Versi PHP tidak bisa disamakan lewat API | Ubah versi PHP website dummy di hPanel |
@@ -233,7 +233,7 @@ Butuh Go 1.26+.
 go vet ./...
 go test ./...
 go test -race ./...
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc9" -o dist/migrator.exe ./cmd/migrator
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X hostinger-migrator/internal/cli.Version=1.0.0-rc10" -o dist/migrator.exe ./cmd/migrator
 ```
 
 Pengujian memakai server tiruan in-process: API Hostinger, SSH yang menjalankan perintah shell sungguhan dengan `mysql`/`mysqldump` tiruan, HTTP, dan IMAP (`tests/`).
