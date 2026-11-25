@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 	"time"
 
@@ -215,10 +216,11 @@ func Delete(ctx context.Context, r *pipeline.Runner, ic *pipeline.ItemContext, a
 	if err != nil {
 		return err
 	}
-	want := map[string]bool{}
-	for _, d := range ic.Databases {
-		want[d.Name] = true
+	skipped, err := pipeline.SkipSnapshot(ctx, r.Store, ic.Item)
+	if err != nil {
+		return err
 	}
+	want := deletionTargets(ic.Databases, skipped)
 	for _, d := range dbs {
 		if !want[d.Name] {
 			continue
@@ -229,4 +231,14 @@ func Delete(ctx context.Context, r *pipeline.Runner, ic *pipeline.ItemContext, a
 		gate.Record(ctx, r.Store, approval, "cleanup.delete_database", d.Name, "OK", "database sumber dihapus")
 	}
 	return nil
+}
+
+func deletionTargets(dbs []store.DatabaseRow, skipped []string) map[string]bool {
+	want := map[string]bool{}
+	for _, d := range dbs {
+		if !slices.Contains(skipped, d.Name) {
+			want[d.Name] = true
+		}
+	}
+	return want
 }

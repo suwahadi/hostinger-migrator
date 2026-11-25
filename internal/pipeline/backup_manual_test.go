@@ -62,6 +62,12 @@ func skipFixture(t *testing.T) (*store.Store, *store.PipelineItem) {
 	if err := st.ReplaceHostingAccounts(ctx, tx, "a", []store.HostingAccount{{ID: "u1", Alias: "a"}}); err != nil {
 		t.Fatal(err)
 	}
+	if err := st.InsertCredential(ctx, tx, "b"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ReplaceHostingAccounts(ctx, tx, "b", []store.HostingAccount{{ID: "u2", Alias: "b"}}); err != nil {
+		t.Fatal(err)
+	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +79,11 @@ func skipFixture(t *testing.T) (*store.Store, *store.PipelineItem) {
 		}}); err != nil {
 		t.Fatal(err)
 	}
-	id, err := st.CreateBatch(ctx, store.Batch{SourceAlias: "a", SourceAccount: "u1", DestAlias: "b", DestAccount: "u2"}, []store.Item{{SourceDomain: "a.com", State: "BACKUP_RUNNING"}})
+	sites, err := st.ListWebsites(ctx, "u1")
+	if err != nil || len(sites) != 1 {
+		t.Fatalf("website fixture: %v %v", sites, err)
+	}
+	id, err := st.CreateBatch(ctx, store.Batch{SourceAlias: "a", SourceAccount: "u1", DestAlias: "b", DestAccount: "u2"}, []store.Item{{SourceDomain: "a.com", WebsiteID: sites[0].ID, State: "BACKUP_RUNNING"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,11 +103,16 @@ func TestConfirmDBSourceValue(t *testing.T) {
 	if _, err := Confirm(ctx, st, "MANUAL_DB_SOURCE", "a.com", it.BatchID, "hapus"); err == nil || !strings.Contains(err.Error(), "lewati") {
 		t.Fatalf("nilai selain kosong/lewati harus ditolak: %v", err)
 	}
+	setSource(t, st, "u1_x", ".env")
+	if _, err := Confirm(ctx, st, "MANUAL_DB_SOURCE", "a.com", it.BatchID, "lewati"); err == nil || !strings.Contains(err.Error(), "tidak ada database") {
+		t.Fatalf("lewati tanpa database bersumber tidak diketahui harus ditolak: %v", err)
+	}
+	setSource(t, st, "u1_x", "api")
 	if _, err := Confirm(ctx, st, "MANUAL_DB_SOURCE", "a.com", it.BatchID, " Lewati "); err != nil {
 		t.Fatal(err)
 	}
 	task, err := st.GetManualTask(ctx, it.ID, "MANUAL_DB_SOURCE")
-	if err != nil || task.Value != "lewati" {
+	if err != nil || task.Value != "lewati:u1_x" {
 		t.Fatalf("nilai tersimpan = %+v %v", task, err)
 	}
 	entries, _ := st.ListAudit(ctx, 50)
@@ -134,5 +149,72 @@ func TestSkippedDatabases(t *testing.T) {
 	got, err := SkippedDatabases(ctx, st, it)
 	if err != nil || !reflect.DeepEqual(got, []string{"u1_x"}) {
 		t.Fatalf("setelah lewati: %v %v", got, err)
+	}
+}
+
+func setSource(t *testing.T, st *store.Store, name, source string) {
+	t.Helper()
+	if _, err := st.DB().ExecContext(context.Background(), "UPDATE databases SET source = ? WHERE name = ?", source, name); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSkippedDatabasesSnapshot(t *testing.T) {
+	ctx := context.Background()
+	st, it := skipFixture(t)
+	if _, err := Confirm(ctx, st, "MANUAL_DB_SOURCE", "a.com", it.BatchID, "lewati"); err != nil {
+		t.Fatal(err)
+	}
+	setSource(t, st, "u1_ok", "api")
+	if got, err := SkippedDatabases(ctx, st, it); err != nil || !reflect.DeepEqual(got, []string{"u1_x"}) {
+		t.Fatalf("database lain yang kehilangan sumber tidak boleh ikut dilewati: %v %v", got, err)
+	}
+	setSource(t, st, "u1_x", ".env")
+	if got, err := SkippedDatabases(ctx, st, it); err != nil || len(got) != 0 {
+		t.Fatalf("database yang sumbernya kini diketahui tidak dilewati lagi: %v %v", got, err)
+	}
+	if got, err := SkipSnapshot(ctx, st, it); err != nil || !reflect.DeepEqual(got, []string{"u1_x"}) {
+		t.Fatalf("snapshot tetap: %v %v", got, err)
+	}
+}
+
+func TestLoadExcludesSkipped(t *testing.T) {
+	ctx := context.Background()
+	st, it := skipFixture(t)
+	if _, err := Confirm(ctx, st, "MANUAL_DB_SOURCE", "a.com", it.BatchID, "lewati"); err != nil {
+		t.Fatal(err)
+	}
+	r := &Runner{}
+	r.Store = st
+	ic, err := r.load(ctx, it)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, d := range ic.Databases {
+		names = append(names, d.Name)
+	}
+	if !reflect.DeepEqual(names, []string{"u1_ok"}) {
+		t.Fatalf("database item = %v", names)
+	}
+}
+
+func TestSiteConfigRead(t *testing.T) {
+	w := &store.Website{Domain: "a.com", UnitPath: "/home/u1/domains/a.com"}
+	cases := []struct {
+		run  *store.InventoryRun
+		want bool
+	}{
+		{&store.InventoryRun{SSHUsed: false}, false},
+		{&store.InventoryRun{SSHUsed: true}, true},
+		{&store.InventoryRun{SSHUsed: true, Warnings: []string{"Probe SSH a.com gagal: timeout"}}, false},
+		{&store.InventoryRun{SSHUsed: true, Warnings: []string{"Folder /home/u1/domains/a.com tidak ditemukan di server."}}, false},
+		{&store.InventoryRun{SSHUsed: true, Warnings: []string{"Probe SSH b.com gagal: timeout"}}, true},
+		{nil, false},
+	}
+	for i, c := range cases {
+		if got := siteConfigRead(c.run, w); got != c.want {
+			t.Errorf("kasus %d: %v", i, got)
+		}
 	}
 }

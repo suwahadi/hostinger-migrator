@@ -279,7 +279,7 @@ func (b *Builder) website(ctx context.Context, it *store.PipelineItem) WebsiteRo
 	if it.PlanNotes != "" {
 		notes = append(notes, it.PlanNotes)
 	}
-	if skipped, _ := pipeline.SkippedDatabases(ctx, b.Store, it); len(skipped) > 0 {
+	if skipped, _ := pipeline.SkipSnapshot(ctx, b.Store, it); len(skipped) > 0 {
 		notes = append(notes, "database dilewati operator: "+strings.Join(skipped, ", "))
 	}
 	if it.LastError != "" {

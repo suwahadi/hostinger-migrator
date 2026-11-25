@@ -220,7 +220,7 @@ func (a *App) printCleanupItem(ctx context.Context, it *store.PipelineItem) {
 		target = it.SourceDomain
 	}
 	a.printf("  - %s (website sumber: %s)\n", it.SourceDomain, target)
-	if skipped, _ := pipeline.SkippedDatabases(ctx, a.store, it); len(skipped) > 0 {
+	if skipped, _ := pipeline.SkipSnapshot(ctx, a.store, it); len(skipped) > 0 {
 		a.say(toneDanger, fmt.Sprintf("    database dilewati: %s (kemungkinan ikut terhapus bersama website sumber)", strings.Join(skipped, ", ")))
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"hostinger-migrator/internal/store"
@@ -25,13 +26,19 @@ func Confirm(ctx context.Context, st *store.Store, code, domain, batchID, value 
 	if t.Status != store.ManualOpen {
 		return nil, fmt.Errorf("tindakan manual %s untuk %s sudah dikonfirmasi pada %s", code, domain, t.ConfirmedAt)
 	}
-	skip := false
+	var skipped []string
 	if code == codeDBSource {
 		value = strings.TrimSpace(value)
 		switch {
 		case value == "":
 		case strings.EqualFold(value, skipValue):
-			value, skip = skipValue, true
+			if skipped, err = unknownDatabases(ctx, st, it); err != nil {
+				return nil, err
+			}
+			if len(skipped) == 0 {
+				return nil, fmt.Errorf("tidak ada database bersumber tidak diketahui untuk %s; '%s' tidak diperlukan", domain, skipValue)
+			}
+			value = skipValue + ":" + strings.Join(skipped, ",")
 		default:
 			return nil, fmt.Errorf("nilai %s hanya boleh kosong atau '%s'", codeDBSource, skipValue)
 		}
@@ -39,12 +46,8 @@ func Confirm(ctx context.Context, st *store.Store, code, domain, batchID, value 
 	if err := st.ConfirmManualTask(ctx, it.ID, code, value); err != nil {
 		return nil, err
 	}
-	if skip {
-		names, err := unknownDatabases(ctx, st, it)
-		if err != nil {
-			return nil, err
-		}
-		if err := st.AppendAudit(ctx, nil, "operator", "item.db_skipped", it.SourceDomain, "OK", strings.Join(names, ", ")); err != nil {
+	if len(skipped) > 0 {
+		if err := st.AppendAudit(ctx, nil, "operator", "item.db_skipped", it.SourceDomain, "OK", strings.Join(skipped, ", ")); err != nil {
 			return nil, err
 		}
 	}
@@ -109,7 +112,7 @@ func unknownDatabases(ctx context.Context, st *store.Store, it *store.PipelineIt
 	return out, nil
 }
 
-func SkippedDatabases(ctx context.Context, st *store.Store, it *store.PipelineItem) ([]string, error) {
+func SkipSnapshot(ctx context.Context, st *store.Store, it *store.PipelineItem) ([]string, error) {
 	t, err := st.GetManualTask(ctx, it.ID, codeDBSource)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, nil
@@ -117,8 +120,27 @@ func SkippedDatabases(ctx context.Context, st *store.Store, it *store.PipelineIt
 	if err != nil {
 		return nil, err
 	}
-	if t.Status != store.ManualConfirmed || t.Value != skipValue {
+	names, ok := strings.CutPrefix(t.Value, skipValue+":")
+	if t.Status != store.ManualConfirmed || !ok || names == "" {
 		return nil, nil
 	}
-	return unknownDatabases(ctx, st, it)
+	return strings.Split(names, ","), nil
+}
+
+func SkippedDatabases(ctx context.Context, st *store.Store, it *store.PipelineItem) ([]string, error) {
+	snapshot, err := SkipSnapshot(ctx, st, it)
+	if err != nil || len(snapshot) == 0 {
+		return nil, err
+	}
+	unknown, err := unknownDatabases(ctx, st, it)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, n := range snapshot {
+		if slices.Contains(unknown, n) {
+			out = append(out, n)
+		}
+	}
+	return out, nil
 }

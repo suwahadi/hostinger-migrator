@@ -77,5 +77,6 @@ Persiapan: satu akun uji **Single** dan satu akun uji **Premium/Business** (sumb
 | F3 | `report` | HTML/JSON/CSV lengkap, kesimpulan jujur, daftar akun ber-SSH key | |
 | F4 | Batch 10–20 website non-kritis | Semua selesai atau tertahan dengan alasan jelas | |
 | F5 | Cabut token di tengah batch, buat baru, `retry --failed --termasuk-blocked` | Lanjut | |
+| F6 | Hapus website uji sumber yang punya database terhubung tetapi dilewati (`confirm MANUAL_DB_SOURCE ... --nilai lewati`), lewat cleanup | Catat apakah Hostinger ikut menghapus database itu; sesuaikan teks "kemungkinan ikut terhapus" bila perlu | |
 
 Kirimkan hasil (setelah token/password disensor) beserta `data/logs/*.log` bila ada yang tidak sesuai harapan.

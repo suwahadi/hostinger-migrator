@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -241,14 +242,12 @@ func (r *Runner) load(ctx context.Context, it *store.PipelineItem) (*ItemContext
 		if err != nil {
 			return nil, err
 		}
-		skipped := map[string]bool{}
-		if names, err := SkippedDatabases(ctx, r.Store, it); err == nil {
-			for _, n := range names {
-				skipped[n] = true
-			}
+		skipped, err := SkippedDatabases(ctx, r.Store, it)
+		if err != nil {
+			return nil, err
 		}
 		for _, d := range dbs {
-			if d.WebsiteDomain == w.Domain && !skipped[d.Name] {
+			if d.WebsiteDomain == w.Domain && !slices.Contains(skipped, d.Name) {
 				ic.Databases = append(ic.Databases, d)
 			}
 		}
@@ -599,11 +598,20 @@ func (r *Runner) RunBackup(ctx context.Context, ic *ItemContext, final bool) (*b
 		return nil, err
 	}
 	m, err := r.Backup.Run(ctx, c, ic.Item, ic.Website, ic.Databases, final)
-	usedSSH := false
-	if run, rerr := r.Store.GetInventoryRun(ctx, ic.Batch.SourceAccount, ic.Batch.SourceAlias); rerr == nil {
-		usedSSH = run.SSHUsed
+	run, _ := r.Store.GetInventoryRun(ctx, ic.Batch.SourceAccount, ic.Batch.SourceAlias)
+	return m, backupManual(err, ic, siteConfigRead(run, ic.Website))
+}
+
+func siteConfigRead(run *store.InventoryRun, w *store.Website) bool {
+	if run == nil || w == nil || !run.SSHUsed {
+		return false
 	}
-	return m, backupManual(err, ic, usedSSH)
+	for _, msg := range run.Warnings {
+		if strings.HasPrefix(msg, "Probe SSH "+w.Domain+" gagal") || strings.HasPrefix(msg, "Folder "+w.UnitPath+" tidak ditemukan") {
+			return false
+		}
+	}
+	return true
 }
 
 func unknownSource(d store.DatabaseRow) bool {
