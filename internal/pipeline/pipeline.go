@@ -592,7 +592,27 @@ func (r *Runner) RunBackup(ctx context.Context, ic *ItemContext, final bool) (*b
 	if err != nil {
 		return nil, err
 	}
-	return r.Backup.Run(ctx, c, ic.Item, ic.Website, ic.Databases, final)
+	m, err := r.Backup.Run(ctx, c, ic.Item, ic.Website, ic.Databases, final)
+	return m, backupManual(err, ic)
+}
+
+func backupManual(err error, ic *ItemContext) error {
+	if !errors.Is(err, backup.ErrUnknownDBSource) {
+		return err
+	}
+	var unknown []string
+	for _, d := range ic.Databases {
+		if d.Source == "" || d.Source == "api" {
+			unknown = append(unknown, d.Name)
+		}
+	}
+	db, domain, acc := strings.Join(unknown, ", "), ic.Item.SourceDomain, ic.Batch.SourceAccount
+	return &ManualError{Code: "MANUAL_DB_SOURCE", Instructions: fmt.Sprintf("Password database %s untuk %s tidak bisa dibaca karena file konfigurasinya belum diketahui.\n"+
+		"Penyebab paling umum: inventaris akun %s dibuat sebelum SSH siap, sehingga file konfigurasi website tidak dibaca.\n"+
+		"1. Pindai ulang akun: migrator inventory --akun %s --refresh (atau menu 3, pindai ulang, pilih akun ini)\n"+
+		"2. Lanjutkan: migrator confirm MANUAL_DB_SOURCE %s\n"+
+		"Bila tindakan ini muncul lagi setelah pindai ulang, website memakai file konfigurasi yang tidak dikenali tool. Catat nama file konfigurasinya dan laporkan ke pengembang.",
+		db, domain, acc, acc, domain)}
 }
 
 func (r *Runner) hProvision(ctx context.Context, ic *ItemContext) (string, error) {

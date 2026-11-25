@@ -33,6 +33,8 @@ const (
 
 var ErrManualBackupIncomplete = errors.New("file backup manual belum lengkap atau tidak valid")
 
+var ErrUnknownDBSource = errors.New("sumber kredensial database tidak diketahui")
+
 type Engine struct {
 	Store     *store.Store
 	BackupDir string
@@ -107,7 +109,7 @@ func (e *Engine) ReadCredentials(ctx context.Context, c *sshx.Client, w *store.W
 	var out []DBCredential
 	for _, db := range dbs {
 		if db.Source == "" || db.Source == "api" {
-			return nil, fmt.Errorf("sumber kredensial database %s tidak diketahui; tidak bisa membuat dump otomatis", db.Name)
+			return nil, fmt.Errorf("%w: database %s; tidak bisa membuat dump otomatis", ErrUnknownDBSource, db.Name)
 		}
 		remote := path.Join(w.UnitPath, db.Source)
 		data, err := c.ReadFile(remote, 1<<20)
