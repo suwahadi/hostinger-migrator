@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -729,11 +730,39 @@ func (s *Scanner) writeJSON(snap *store.InventorySnapshot) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data = []byte(s.redactor().String(string(data)))
+	if data, err = redactJSONStrings(data, s.redactor()); err != nil {
+		return "", err
+	}
 	p := filepath.Join(dir, fmt.Sprintf("%s-%s.json", snap.Alias, snap.AccountID))
 	tmp := p + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return "", err
 	}
 	return p, os.Rename(tmp, p)
+}
+
+func redactJSONStrings(data []byte, r *logx.Redactor) ([]byte, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return nil, err
+	}
+	return json.MarshalIndent(redactValue(v, r), "", "  ")
+}
+
+func redactValue(v any, r *logx.Redactor) any {
+	switch x := v.(type) {
+	case string:
+		return r.String(x)
+	case []any:
+		for i := range x {
+			x[i] = redactValue(x[i], r)
+		}
+	case map[string]any:
+		for k, e := range x {
+			x[k] = redactValue(e, r)
+		}
+	}
+	return v
 }

@@ -23,7 +23,7 @@ var Global = NewRedactor()
 
 func (r *Redactor) Add(secret string) {
 	secret = strings.TrimSpace(secret)
-	if len(secret) < 4 {
+	if len(secret) < 4 || isLiteral(secret) {
 		return
 	}
 	r.mu.Lock()
@@ -69,4 +69,12 @@ var sensitiveKey = regexp.MustCompile(`(?i)(password|passwd|pwd|token|secret|aut
 
 func IsSensitiveKey(key string) bool {
 	return sensitiveKey.MatchString(key)
+}
+
+func isLiteral(s string) bool {
+	switch strings.ToLower(s) {
+	case "true", "false", "null", "none":
+		return true
+	}
+	return strings.HasPrefix(s, "${")
 }
