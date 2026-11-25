@@ -1,6 +1,8 @@
 package logx
 
 import (
+	"bytes"
+	"encoding/json"
 	"regexp"
 	"sort"
 	"strings"
@@ -69,4 +71,30 @@ var sensitiveKey = regexp.MustCompile(`(?i)(password|passwd|pwd|token|secret|aut
 
 func IsSensitiveKey(key string) bool {
 	return sensitiveKey.MatchString(key)
+}
+
+func (r *Redactor) JSON(data []byte) ([]byte, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return nil, err
+	}
+	return json.MarshalIndent(r.redactValue(v), "", "  ")
+}
+
+func (r *Redactor) redactValue(v any) any {
+	switch x := v.(type) {
+	case string:
+		return r.String(x)
+	case []any:
+		for i := range x {
+			x[i] = r.redactValue(x[i])
+		}
+	case map[string]any:
+		for k, e := range x {
+			x[k] = r.redactValue(e)
+		}
+	}
+	return v
 }

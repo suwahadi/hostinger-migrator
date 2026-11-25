@@ -429,8 +429,16 @@ func (b *Builder) Write(rep *Report, dir string, formats map[string]bool) ([]str
 	var out []string
 	if formats["json"] {
 		data, _ := json.MarshalIndent(rep, "", "  ")
+		r := b.Redactor
+		if r == nil {
+			r = logx.Global
+		}
+		data, err := r.JSON(data)
+		if err != nil {
+			return out, err
+		}
 		p := filepath.Join(dir, "laporan.json")
-		if err := os.WriteFile(p, []byte(b.red(string(data))), 0o600); err != nil {
+		if err := os.WriteFile(p, data, 0o600); err != nil {
 			return out, err
 		}
 		out = append(out, p)
